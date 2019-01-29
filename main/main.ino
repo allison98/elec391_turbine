@@ -19,13 +19,21 @@ VIN -- VIN
 #include "tlc_fades.h"
 
 #define STEPS 1023 // the number of steps in one revolution of your motor (28BYJ-48)
+#define TLC_0 0
+#define TLC_1 1
+#define TLC_2 2
+#define DIRECPIN 0
+#define BC_VOLTAGE 1
+#define BC_CURRENT 2
 
-Stepper stepper(STEPS, 2, 4, 3, 6);
+Stepper stepper(STEPS, 0, 2, 1, 4);
 
 int previous_direction = 0;
 float bc_current, bc_voltage, read_current, read_voltage;
+int duty = 0;
 
-int direcPin = 0; //
+float power = 1;
+float prev_power;
 
 void setup() {
     Serial.begin(9600); // connect to computer
@@ -56,7 +64,7 @@ void loop() {
 
 */
 
-int val_direction = analogRead(direcPin);
+int val_direction = analogRead(DIRECPIN);
 
 int step_direction = val_direction - previous_direction;
 /*
@@ -86,9 +94,9 @@ previous_direction = val_direction;
 |------------------------------|
 */
 
-/* current pseudo code
-read_voltage = digvolt(analogRead(1));
-read_current = analogRead(2)
+// current pseudo code
+/*read_voltage = digvolt(analogRead(BC_VOLTAGE));
+read_current = analogRead(BC_CURRENT);
 
 bc_current = read_current;
 bc_voltage = read_voltage;
@@ -97,31 +105,36 @@ power = bc_voltage * bc_current;
 
 
 if (power > prev_power) {
-    //decrease duty cycle
+    duty++;
+}
+else if (power < prev_power) {
+    duty--;
 }
 
-if (power < prev_power) {
-    //increase duty cycle
-}
+Tlc.set(TLC_0,duty);
+Tlc.update();
 
 prev_power = power;
+
 */
 
 /* DEMO 1 code*/
 
-int voltage = digvolt(analogRead(direcPin));
+int voltage = analogRead(1);
 // PWM value (0 - 4095)
 
-if (voltage <= 1) 
+if (voltage <= 200) 
    Tlc.set(0,1000);
-else if (voltage <=2 && voltage > 1)
+else if (voltage <=400 && voltage > 200)
   Tlc.set(0, 2000);
-else if (voltage <=3 && voltage > 2)
+else if (voltage <=600 && voltage > 800)
   Tlc.set(0, 3000);
 else
-  Tlc.set(0, 4000);   
+  Tlc.set(0, 4000); 
 
-  
+Tlc.set(0, 4*voltage);
+Tlc.set(1, 4*voltage);
+Tlc.set(2, 4*voltage);
 Tlc.update();
 delay(500);   
 }
