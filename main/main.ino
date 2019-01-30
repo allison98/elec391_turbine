@@ -12,11 +12,21 @@ PIN 9 - XLAT (9)
 PIN 5 -- GSCLK (3)
 VIN -- VIN
 
+Connect bluetooth module to Arduino
+        (Not all pins on the Leonardo and Micro support change interrupts,
+        so only the following can be used for RX:
+        8, 9, 10, 11, 14 (MISO), 15 (SCK), 16 (MOSI).)
+
+Leo -- bluetooth
+PIN 15 -- TXD
+PIN 8 -- RXD
 */
 
-#include <Stepper.h> // For the stepper motor
-#include "Tlc5940.h"
-#include "tlc_fades.h"
+#include "Stepper.h" // For the stepper motor
+#include "Tlc5940.h" // PWM
+#include "tlc_fades.h" // PWM
+#include "SoftwareSerial.h" // bluetooth
+
 
 #define STEPS 1023 // the number of steps in one revolution of your motor (28BYJ-48)
 #define TLC_0 0
@@ -27,6 +37,8 @@ VIN -- VIN
 #define BC_CURRENT 2
 
 Stepper stepper(STEPS, 0, 2, 1, 4);
+SoftwareSerial mySerial(15, 8); // RX, TX
+
 
 int previous_direction = 0;
 float bc_current, bc_voltage, read_current, read_voltage;
@@ -38,8 +50,13 @@ float prev_power;
 void setup() {
     Serial.begin(9600); // connect to computer
     Tlc.init(); //PWM init 
-      stepper.setSpeed(10); 
-    
+    stepper.setSpeed(10); 
+      // Open serial communications and wait for port to open:
+    Serial1.begin(9600);
+    while (!Serial1) {}
+     // wait for serial port to connect. Needed for native USB port only
+    mySerial.begin(9600);
+    mySerial.println("Start");
 }
 
 void loop() {   
@@ -95,20 +112,19 @@ previous_direction = val_direction;
 */
 
 // current pseudo code
-/*read_voltage = digvolt(analogRead(BC_VOLTAGE));
-read_current = analogRead(BC_CURRENT);
+/* read_voltage = digvolt(analogRead(BC_VOLTAGE));
+read_current = digcurr(analogRead(BC_CURRENT);
 
 bc_current = read_current;
 bc_voltage = read_voltage;
 
 power = bc_voltage * bc_current;
 
-
 if (power > prev_power) {
-    duty++;
+    duty--;
 }
 else if (power < prev_power) {
-    duty--;
+    duty++;
 }
 
 Tlc.set(TLC_0,duty);
@@ -120,9 +136,11 @@ prev_power = power;
 
 /* DEMO 1 code*/
 
-int voltage = analogRead(1);
+int voltage0 = analogRead(0);
+int voltage1 = analogRead(1);
 // PWM value (0 - 4095)
 
+/*
 if (voltage <= 200) 
    Tlc.set(0,1000);
 else if (voltage <=400 && voltage > 200)
@@ -130,13 +148,23 @@ else if (voltage <=400 && voltage > 200)
 else if (voltage <=600 && voltage > 800)
   Tlc.set(0, 3000);
 else
-  Tlc.set(0, 4000); 
+  Tlc.set(0, 4000); */
 
-Tlc.set(0, 4*voltage);
-Tlc.set(1, 4*voltage);
-Tlc.set(2, 4*voltage);
+Tlc.set(0, 4*voltage0);
+Tlc.set(1, 4*voltage1);
+Tlc.set(2, 4*voltage1);
 Tlc.update();
+
+float v0 = digvolt(float(voltage0));
+float v1 = digvolt(float(voltage1));
+
+mySerial.print("Analog Input 0: ");
+mySerial.print(v0);
+mySerial.print(" Analog Input 1: ");
+mySerial.println(v1);
+
 delay(500);   
+
 }
 
 float digvolt(float digital) {
