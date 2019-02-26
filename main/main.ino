@@ -23,29 +23,34 @@ PIN 8 -- RXD
 */
 
 #include "Stepper.h" // For the stepper motor
+#include <Unistep2.h>
 #include "Tlc5940.h" // PWM
 #include "tlc_fades.h" // PWM
 #include "SoftwareSerial.h" // bluetooth
 
 
 #define STEPS 1023 // the number of steps in one revolution of your motor (28BYJ-48)
-#define TLC_0 0
-#define TLC_1 1
-#define TLC_2 2
-#define DIRECPIN 0
-#define BC_VOLTAGE 1
-#define BC_CURRENT 2
 
-Stepper stepper(STEPS, 0, 2, 1, 4);
+#define BOOSTPIN 0 // TLC SHIELD
+
+#define DIRECPIN 0 // Analog 0
+#define BC_VOLTAGE 1 // Analog 1
+#define BC_CURRENT 2 // Analog 2
+
+#define MAXDUTY 68 // Dependent on what the switching frequency is
+
+Stepper stepper(STEPS, 2, 6, 4, 7); // Connections: 2- orange/IN1, 4 - blue/IN2, 6 - green/IN3, 7 - yellow/IN4
+
 SoftwareSerial mySerial(15, 8); // RX, TX
-
 
 int previous_direction = 0;
 float bc_current, bc_voltage, read_current, read_voltage;
-int duty = 0;
+int duty = MAXDUTY/2;
 
-float power = 1;
-float prev_power;
+int currentMillis;
+float power = 0;
+float maxPower, minPower, avgPower, totalE;
+float prev_power = -1;
 
 void setup() {
     Serial.begin(9600); // connect to computer
@@ -80,31 +85,16 @@ void loop() {
 |------------------------------|
 
 */
-
+/*
 int val_direction = analogRead(DIRECPIN);
 
 int step_direction = val_direction - previous_direction;
-/*
-if (step_direction > 512)
-    step_direciton = 512;
-if (step direction < 0)
-    step_direction = 0;
+
+if (abs(step_direction) > 40)  {
+  stepper.step(step_direction); // blocking function
+  previous_direction = val_direction;
+}
 */
-
-stepper.step(step_direction);
-
-previous_direction = val_direction;
-
-
-/*    
-    stepper.setSpeed(1); // 1 rpm
-    stepper.step(2038); // do 2038 steps -- corresponds to one revolution in one minute
-    delay(1000); // wait for one second
-    stepper.setSpeed(1); // 1 rpm
-    stepper.step(-2038); // do 2038 steps in the other direction */
-
-    // Use for testing motor 
-
 /*
 |------------------------------|
 |  CONTROL LOOP 2 - PWM BOOST  |
@@ -112,59 +102,83 @@ previous_direction = val_direction;
 */
 
 // current pseudo code
-/* read_voltage = digvolt(analogRead(BC_VOLTAGE));
-read_current = digcurr(analogRead(BC_CURRENT);
+read_voltage = digvolt(analogRead(BC_VOLTAGE));
+read_current = digvolt(analogRead(BC_CURRENT));
 
 bc_current = read_current;
 bc_voltage = read_voltage;
 
 power = bc_voltage * bc_current;
 
-if (power > prev_power) {
+if (power > prev_power && duty != 0) {
     duty--;
 }
-else if (power < prev_power) {
+
+else if (power < prev_power && duty != MAXDUTY) {
     duty++;
 }
 
-Tlc.set(TLC_0,duty);
+else {
+  duty = duty; // max or min duty then don't change or if power is the same
+}
+
+if(maxPower < power) maxPower = power;
+if(minPower > power) minPower = power;
+
+// Update the PWM output
+Tlc.set(BOOSTPIN,40);
 Tlc.update();
 
 prev_power = power;
 
-*/
 
-/* DEMO 1 code*/
-
+/* DEMO 1 code
 int voltage0 = analogRead(0);
 int voltage1 = analogRead(1);
-// PWM value (0 - 4095)
+// PWM value (0 - 68) with switching freq 118kHz
 
-/*
-if (voltage <= 200) 
-   Tlc.set(0,1000);
-else if (voltage <=400 && voltage > 200)
-  Tlc.set(0, 2000);
-else if (voltage <=600 && voltage > 800)
-  Tlc.set(0, 3000);
-else
-  Tlc.set(0, 4000); */
 
-Tlc.set(0, 4*voltage0);
-Tlc.set(1, 4*voltage1);
-Tlc.set(2, 4*voltage1);
+Tlc.set(BOOSTPIN, voltage0/15) ;
 Tlc.update();
 
 float v0 = digvolt(float(voltage0));
 float v1 = digvolt(float(voltage1));
+*/
 
+/* SERIAL PRINTING TO BLUETOOTH */
+
+/* calculations, average wind speed and average direction? Maximum power*/
+
+avgPower = (maxPower + minPower)/2;
+currentMillis = millis()/1000;
+totalE = power*currentMillis;
+
+/*String data = String(maxPower) + ',' + String(minPower) +  ',' + String(avePower) +  ',' + String(totalE);
+mySerial.print(data);*/
+
+/*-------*/
+
+mySerial.print(maxPower);  
+mySerial.print(",");  
+mySerial.print(minPower);  
+mySerial.print(",");  
+mySerial.print(avgPower);  
+mySerial.print(",");  
+mySerial.print(totalE);    
+mySerial.print(",");  
+mySerial.print(power); 
+mySerial.print(",");  
+mySerial.print(read_voltage);    
+mySerial.print(",");  
+mySerial.print(read_current);           
+mySerial.print(";");
+
+/*
 mySerial.print("Analog Input 0: ");
 mySerial.print(v0);
 mySerial.print(" Analog Input 1: ");
 mySerial.println(v1);
-
-delay(500);   
-
+*/
 }
 
 float digvolt(float digital) {
