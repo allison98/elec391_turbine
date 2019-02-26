@@ -24,10 +24,10 @@ PIN 8 -- RXD
 
 #include "Stepper.h" // For the stepper motor
 #include <Unistep2.h>
-#include "Tlc5940.h" // PWM
-#include "tlc_fades.h" // PWM
+//#include "Tlc5940.h" // PWM
+//#include "tlc_fades.h" // PWM
 #include "SoftwareSerial.h" // bluetooth
-
+#include "TimerThree.h"
 
 #define STEPS 1023 // the number of steps in one revolution of your motor (28BYJ-48)
 
@@ -39,9 +39,46 @@ PIN 8 -- RXD
 
 #define MAXDUTY 68 // Dependent on what the switching frequency is
 
+#define PWM9   OCR1A
+#define PWM10  OCR1B
+#define PWM11  OCR1C
+
+// Macro to converts from duty (0..100) to PWM (0..255)
+#define DUTY2PWM(x)  ((255*(x))/100)
+
+// Configure the PWM clock
+// The argument is one of the 5 previously defined modes
+void pwm91011configure(int mode)
+{
+// TCCR1A configuration
+//  00 : Channel A disabled D9
+//  00 : Channel B disabled D10
+//  00 : Channel C disabled D11
+//  01 : Fast PWM 8 bit
+TCCR1A=1;
+
+// TCCR1B configuration
+// Clock mode and Fast PWM 8 bit
+TCCR1B=mode|0x08;  
+
+// TCCR1C configuration
+TCCR1C=0;
+}
+
+// Set PWM to D9
+// Argument is PWM between 0 and 255
+void pwmSet9(int value)
+{
+OCR1A=value;   // Set PWM value
+DDRB|=1<<5;    // Set Output Mode B5
+TCCR1A|=0x80;  // Activate channel
+}
+
 Stepper stepper(STEPS, 2, 6, 4, 7); // Connections: 2- orange/IN1, 4 - blue/IN2, 6 - green/IN3, 7 - yellow/IN4
 
 SoftwareSerial mySerial(15, 8); // RX, TX
+
+
 
 int previous_direction = 0;
 float bc_current, bc_voltage, read_current, read_voltage;
@@ -54,7 +91,7 @@ float prev_power = -1;
 
 void setup() {
     Serial.begin(9600); // connect to computer
-    Tlc.init(); //PWM init 
+    //Tlc.init(); //PWM init 
     stepper.setSpeed(10); 
       // Open serial communications and wait for port to open:
     Serial1.begin(9600);
@@ -62,6 +99,12 @@ void setup() {
      // wait for serial port to connect. Needed for native USB port only
     mySerial.begin(9600);
     mySerial.println("Start");
+    
+    Timer3.initialize(1000000);
+    Timer3.attachInterrupt(adjustDirection); // blinkLED to run every 0.15 seconds
+
+    pwm91011configure(1);
+
 }
 
 void loop() {   
@@ -77,23 +120,10 @@ void loop() {
     // a) measure wind direction then control stepper motor
     // b) measure booster converter values and control PWM
    //370 560 oohms 800
-
+pwmSet9(DUTY2PWM(50));
 /*
 
-|------------------------------|
-|  CONTROL LOOP 1 - DIRECTION  |
-|------------------------------|
 
-*/
-/*
-int val_direction = analogRead(DIRECPIN);
-
-int step_direction = val_direction - previous_direction;
-
-if (abs(step_direction) > 40)  {
-  stepper.step(step_direction); // blocking function
-  previous_direction = val_direction;
-}
 */
 /*
 |------------------------------|
@@ -126,8 +156,8 @@ if(maxPower < power) maxPower = power;
 if(minPower > power) minPower = power;
 
 // Update the PWM output
-Tlc.set(BOOSTPIN,40);
-Tlc.update();
+//Tlc.set(BOOSTPIN,40);
+//Tlc.update();
 
 prev_power = power;
 
@@ -183,4 +213,23 @@ mySerial.println(v1);
 
 float digvolt(float digital) {
     return digital*5/1023;
+}
+
+  /*
+|------------------------------|
+|  CONTROL LOOP 1 - DIRECTION  |
+|------------------------------|
+ INTERRUPT
+*/
+void adjustDirection() {
+
+int val_direction = analogRead(DIRECPIN);
+
+int step_direction = val_direction - previous_direction;
+
+if (abs(step_direction) > 40)  {
+  stepper.step(step_direction); // blocking function
+  previous_direction = val_direction;
+}
+
 }
