@@ -7,7 +7,6 @@
 #include <SoftwareSerial.h> // bluetooth
 #include <AltSoftSerial.h>
 
-
 // Frequency modes for TIMER4
 #define PWM187k 1   // 187500 Hz
 #define PWM94k  2   //  93750 Hz
@@ -35,7 +34,7 @@
 
 Unistep2 stepperX(2,4,6,7, STEPS, 1000); // non blocking stepper motor
 //SoftwareSerial mySerial(8, 9); // RX, TX
-//AltSoftSerial altSerial;
+AltSoftSerial altSerial;
 
 
 //Stepper stepper(STEPS, 2, 6, 4, 7); // Connections: 2- orange/IN1, 4 - blue/IN2, 6 - green/IN3, 7 - yellow/IN4
@@ -92,18 +91,12 @@ void change_step_ISR(void)
 
 void loop(void)
 {
-
-  //change_direction();
   
   stepperX.run(); // have to run for the nonblocking motor 
-
-//  Serial.println(dutycycle);
-//  Serial.println(step_direction);
   read_direc();
   change_PWM(); // change duty cycle
-
-
-//  print_bt();
+  Serial.println(step_direction);
+  //print_bt();
  
 }
 
