@@ -36,7 +36,13 @@
 #define INITIAL_VOLTAGE 1
 #define INITIAL_CURRENT 2
 
-Unistep2 stepperX(2,6,3,7, STEPS, 10000); // non blocking stepper motor
+Unistep2 stepperX(2,6,3,7, STEPS, 10000); // non blocking bipolar stepper motor
+    // connections with the L298
+     // red to green A
+     // blue to green B
+     // green to red A
+     // black to red B
+     // stepper motor 4 pins on the L298 left to right pins 2,3,6,7
 //SoftwareSerial mySerial(8, 9); // RX, TX
 AltSoftSerial altSerial; // pin 5 for transmitting
 // PWM at pin 13
