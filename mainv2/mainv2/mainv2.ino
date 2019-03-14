@@ -1,11 +1,10 @@
 // Using an interrupt for the stepper motot, now bipolar (h bridge driven)
 // using the timer registers for PWM out put
-
+// synchronous update every 0.5 seconds
 
 // timer 4 PWM trigger
 // timer 1 altserial
 // timer 3 interrupt 
-
 
 #include <TimerOne.h> // timer interrupt
 #include <Stepper.h> // 
@@ -49,7 +48,18 @@ AltSoftSerial altSerial; // pin 5 for transmitting
 
 //Stepper stepper(STEPS, 2, 6, 4, 7); // Connections: 2- orange/IN1, 4 - blue/IN2, 6 - green/IN3, 7 - yellow/IN4
 
+// -------------  //
+// AR PIN SETUP  //
+// ------------- //
+/*
+Stepper motor 4 pins on the L298 left to right Pins 2,3,6,7
+Pin 5 is bluetooth RXD
+Pin 13 is PWM 
 
+PIN 0 and 1 (mostly used for uploading will keep free for now)
+
+
+*/
 int previous_direction = 0;
 int val_direction = 0;
 int step_direction = 0;
@@ -66,7 +76,6 @@ float prev_power = 0;
 
 void setup(void)
 {
- 
   Timer1.initialize(500000);
   Timer1.attachInterrupt(turbine_ISR); // blinkLED to run every 0.15 seconds
   // stepper.setSpeed(10); 
@@ -98,7 +107,6 @@ void change_step_ISR(void)
   } 
 }
 
-
 // --------  //
 // MAIN LOOP //
 // --------- //
@@ -115,12 +123,18 @@ void loop(void)
 // READ CURRENT AND VOLTAGE  //
 // ------------------------- //
 
-float digvolt(float digital) {
-    return digital*5/1023;
+int digvolt(int digital) {
+    return digital*5/1023*1000;
 }
 
-float digcurr(float digital) {
-    return (10.639*digital - 26.643);
+int digcurr(int digital) {
+    return (10.639*digital - 26.643)*1000;
+}
+
+int toDegree(int step) {
+  // 200 steps and 360 degrees
+  // 1.8 degrees/step
+  // calculate degrees away from origin (0 degrees depending on position of motor)  
 }
 
 void read_direc() {
@@ -128,6 +142,12 @@ void read_direc() {
   step_direction = val_direction - previous_direction; 
   read_voltage = digvolt(analogRead(INITIAL_VOLTAGE));
  // read_current = digcurr(analogRead(INITIAL_CURRENT));
+}
+
+void changeStator() {
+  if (read_voltage <= 2500) {// voltage * 1000 
+    digitalWrite()
+  }
 }
 
 // ------------------------  //
@@ -139,12 +159,12 @@ void change_PWM() {
   //for demo
   //power = read_voltage;
   
-if (power > (prev_power + 0.05)) {
+if (power > (prev_power + 5)) {
     dutycycle = dutycycle + 3;
     prev_power = power;
 }
 
-else if (power < (prev_power - 0.05)) {
+else if (power < (prev_power - 5)) {
     dutycycle = dutycycle - 3;
     prev_power = power;
 }
@@ -173,12 +193,15 @@ void print_bt() {
   /* SERIAL PRINTING TO BLUETOOTH */
    change_step_ISR();
 /* calculations, average wind speed and average direction? Maximum power*/
-    avgPower = (maxPower + minPower)/2;
+    avgPower = float((maxPower + minPower)/2/1000);
    // currentMillis = millis()/1000;
     //totalE = power*currentMillis;
 
-    String powervals = String(avgPower)  + ',' + String(power)  + ',' + String(read_voltage)+ ';';    
-    altSerial.print(powervals);  
+    String powervals = String(avgPower)  + ',' + String(float(power)/1000)  + ',' + String(float(read_voltage)/1000)+','+ String(val_direction);    
+    String powervals_bt = String(avgPower)  + ','+ String(float(power)/1000)  + ',' + String(float(read_voltage)/1000)+','+ String(val_direction)+';';    
+
+    altSerial.println(powervals_bt); 
+    Serial.println(powervals);
 
 }
 
