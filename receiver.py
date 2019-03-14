@@ -24,7 +24,7 @@ graphic.addLabel('Raw signal', colspan=4)
 
 # First row of plots
 graphic.nextRow()
-p1 = graphic.addPlot(title="Average Power", labels={'left':'Watts', 'bottom':'Time elapsed'})
+p1 = graphic.addPlot(title="Running Average Power", labels={'left':'Watts', 'bottom':'Time elapsed'})
 p3 = graphic.addPlot(title="Voltage", labels={'left':'Voltage', 'bottom':'Time elapsed'})
 p4 = graphic.addPlot(title="Direction", labels={'left':'Voltage in digital', 'bottom':'Time elapsed'})
 
@@ -51,28 +51,34 @@ Xm4 = np.linspace(0,0,windowWidth)
 ptr = -windowWidth
 data_array = [0.0, 0.0, 0.0, 0.0]
 
+power_average = []
+
 # Reads string from serial and converts it to list of ints
 def read_data():
 	data = ser.readline().decode()
 	while data.isspace(): # if faulty reading (whitespace), keep trying
 		data = ser.readline().decode()
 	return list(map(float, data.split(",")))
+	# Values comming in as avg. power, power, readvoltage and direction
 
-# Infinite loop that implements live graphing
+# Update values on graph
 def update():
 	global curve1, curve2, curve3, curve3, ptr, Xm1, Xm2, Xm3, Xm4
 
 	data_array = read_data()
+	power_average.append(data_array[1])
+
 	
 	Xm1[:-1] = Xm1[1:]
 	Xm2[:-1] = Xm2[1:]
 	Xm3[:-1] = Xm3[1:]
 	Xm4[:-1] = Xm4[1:]
 
-	value1 = data_array[0]
+	value1 = sum(power_average)/len(power_average) # data_array[0]
 	value2 = data_array[1]
 	value3 = data_array[2]
 	value4 = data_array[3]
+	#avgPower = sum(power_average/len(power_average))
 
 	try: 
 		Xm1[-1] = float(value1)

@@ -11,6 +11,8 @@
 #include <Unistep2.h> // non blocking stepper motor
 #include <AltSoftSerial.h>
 
+
+/*http://r6500.blogspot.com/2014/12/fast-pwm-on-arduino-leonardo.html*/
 // Frequency modes for TIMER4
 #define PWM187k 1   // 187500 Hz
 #define PWM94k  2   //  93750 Hz
@@ -58,6 +60,17 @@ Pin 13 is PWM
 
 PIN 0 and 1 (mostly used for uploading will keep free for now)
 
+PINS 6 or 13 cannot use analogWrite
+
+PIN 10, 11,12 for generator stator pins
+
+not used pins
+PIN 0,1,4,8,9 (15,16,17?)
+
+analog pins not used
+PIN 4,5 
+
+and digital pins (pins 4, 6, 8, 9, 10, and 12 can be used for analog)
 
 */
 int previous_direction = 0;
@@ -79,7 +92,7 @@ void setup(void)
   Timer1.initialize(500000);
   Timer1.attachInterrupt(turbine_ISR); // blinkLED to run every 0.15 seconds
   // stepper.setSpeed(10); 
-  pwm613configure(PWM47k); // configure pin 9 for PWM using hardware registers
+  pwm613configure(PWM94k); // configure pin 9 for PWM using hardware registers
   Serial.begin(9600);
   Serial1.begin(9600);
     while (!Serial1) {}
@@ -144,9 +157,17 @@ void read_direc() {
  // read_current = digcurr(analogRead(INITIAL_CURRENT));
 }
 
+// BONUS FEATURE configure single or parallel
 void changeStator() {
   if (read_voltage <= 2500) {// voltage * 1000 
-    digitalWrite()
+    digitalWrite(10, LOW);
+    digitalWrite(11, LOW);
+    digitalWrite(12, LOW);
+  }
+  else {
+    digitalWrite(10, HIGH);
+    digitalWrite(11, HIGH);
+    digitalWrite(12, HIGH); 
   }
 }
 
@@ -173,14 +194,14 @@ else {
   dutycycle = dutycycle; // max or min duty then don't change or if power is the same
 }
 
-if (dutycycle < 0) dutycycle = 0;
-if (dutycycle > 100) dutycycle = 100;
+if (dutycycle < 20) dutycycle = 20;
+if (dutycycle > 80) dutycycle = 80;
     
   if(maxPower < power) maxPower = power;
   
   if(minPower > power) minPower = power;
   
-  // set pin 9 for PWM output to boost converter
+  // set pin 13 for PWM output to boost converter
   pwmSet13(DUTY2PWM(dutycycle));  
 }
 
