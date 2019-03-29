@@ -5,8 +5,6 @@ from pyqtgraph.ptime import time
 import time
 import serial 
 
-# Create serial port and file for writing data
-# Remember to change port name if necessary and run the appropriate Arduino program
 port_name = "COM5"
 baudrate = 9600
 ser = serial.Serial(port_name,baudrate)
@@ -24,30 +22,35 @@ graphic.addLabel('Raw signal', colspan=4)
 
 # First row of plots
 graphic.nextRow()
-p1 = graphic.addPlot(title="Running Average Power", labels={'left':'Watts', 'bottom':'Time elapsed'})
-p3 = graphic.addPlot(title="Voltage", labels={'left':'Voltage', 'bottom':'Time elapsed'})
-p4 = graphic.addPlot(title="Direction", labels={'left':'Voltage in digital', 'bottom':'Time elapsed'})
+p1 = graphic.addPlot(title="Degree", labels={'left':'Degrees', 'bottom':'Time'})
+p2 = graphic.addPlot(title="Duty", labels={'left':'%', 'bottom':'Time'})
+p3 = graphic.addPlot(title="Voltage", labels={'left':'Voltage', 'bottom':'Time'})
 
 # Second row of plots 
 graphic.nextRow()
-p2 = graphic.addPlot(title="Power", labels={'left':'Watts', 'bottom':'Time elapsed'}, colspan = 3)
+p4 = graphic.addPlot(title="Power", labels={'left':'Watts', 'bottom':'Time'}, colspan = 2)
+p5 = graphic.addPlot(title="Running Average", labels={'left':'Watts', 'bottom':'Time'}, colspan = 2)
 
 
 p1.showGrid(x=None, y=True, alpha=None)
 p2.showGrid(x=None, y=True, alpha=None)
 p3.showGrid(x=None, y=True, alpha=None)
 p4.showGrid(x=None, y=True, alpha=None)
+p5.showGrid(x=None, y=True, alpha=None)
 
 curve1 = p1.plot()
 curve2 = p2.plot()
 curve3 = p3.plot()
 curve4 = p4.plot()
+curve5 = p5.plot()
 
 windowWidth = 100                      
 Xm1 = np.linspace(0,0,windowWidth)
 Xm2 = np.linspace(0,0,windowWidth)
 Xm3 = np.linspace(0,0,windowWidth)
 Xm4 = np.linspace(0,0,windowWidth)   
+Xm5 = np.linspace(0,0,windowWidth)   
+
 ptr = -windowWidth
 data_array = [0.0, 0.0, 0.0, 0.0]
 
@@ -59,16 +62,15 @@ def read_data():
 	while data.isspace(): # if faulty reading (whitespace), keep trying
 		data = ser.readline().decode()
 	return list(map(float, data.split(",")))
-	# Values comming in as avg. power, power, readvoltage and direction
+	# Values comming in as power, duty cycle, load voltage and degree
 
 # Update values on graph
 def update():
 	global curve1, curve2, curve3, curve3, ptr, Xm1, Xm2, Xm3, Xm4
 
 	data_array = read_data()
-	power_average.append(data_array[1])
+	power_average.append(data_array[0])
 
-	
 	Xm1[:-1] = Xm1[1:]
 	Xm2[:-1] = Xm2[1:]
 	Xm3[:-1] = Xm3[1:]

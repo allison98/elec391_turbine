@@ -1,10 +1,33 @@
 // Using an interrupt for the stepper motot, now bipolar (h bridge driven)
 // using the timer registers for PWM out put
-// synchronous update every 0.5 seconds
+// synchronous update every __ seconds
 
 // timer 4 PWM trigger
 // timer 1 altserial
 // timer 3 interrupt 
+
+// -------------  //
+// AR PIN SETUP  //
+// ------------- //
+
+/*
+Stepper motor 4 pins on the L298 left to right Pins 2,3,4,7
+Pin 5 is bluetooth RXD
+Pin 6 is PWM 
+
+PIN 0 and 1 (mostly used for uploading will keep free for now)
+
+PINS 6 or 13 cannot use analogWrite
+
+PIN 10, 11,12 for generator stator pins
+
+not used pins
+PIN 0,1,,8,9 (15,16,17?)
+
+analog pins not used
+PIN 4,5 
+and digital pins (pins 4, 6, 8, 9, 10, and 12 can be used for analog)
+*/
 
 #include <TimerOne.h> // timer interrupt
 #include <Stepper.h> // 
@@ -12,7 +35,7 @@
 #include <AltSoftSerial.h>
 
 
-/*http://r6500.blogspot.com/2014/12/fast-pwm-on-arduino-leonardo.html*/
+/*http://r6500.blogspot.com/2014/12/fast-pwm-on-arduino-leonardo.html */
 // Frequency modes for TIMER4
 #define PWM187k 1   // 187500 Hz
 #define PWM94k  2   //  93750 Hz
@@ -37,62 +60,102 @@
 #define INITIAL_VOLTAGE 1
 #define INITIAL_CURRENT 2
 
-Unistep2 stepperX(2,6,3,7, STEPS, 10000); // non blocking bipolar stepper motor
+#define POWER_DIFF 0.05
+#define LOAD_RESISTANCE 100
+
+
+
+Unistep2 stepperX(2,4,3,7, STEPS, 10000); // non blocking bipolar stepper motor
     // connections with the L298
      // red to green A
      // blue to green B
      // green to red A
      // black to red B
-     // stepper motor 4 pins on the L298 left to right pins 2,3,6,7
-//SoftwareSerial mySerial(8, 9); // RX, TX
+     // stepper motor 4 pins on the L298 left to right pins 2,3,4,7
+
 AltSoftSerial altSerial; // pin 5 for transmitting
-// PWM at pin 13
+// PWM at pin 6
 
-//Stepper stepper(STEPS, 2, 6, 4, 7); // Connections: 2- orange/IN1, 4 - blue/IN2, 6 - green/IN3, 7 - yellow/IN4
-
-// -------------  //
-// AR PIN SETUP  //
-// ------------- //
-/*
-Stepper motor 4 pins on the L298 left to right Pins 2,3,6,7
-Pin 5 is bluetooth RXD
-Pin 13 is PWM 
-
-PIN 0 and 1 (mostly used for uploading will keep free for now)
-
-PINS 6 or 13 cannot use analogWrite
-
-PIN 10, 11,12 for generator stator pins
-
-not used pins
-PIN 0,1,4,8,9 (15,16,17?)
-
-analog pins not used
-PIN 4,5 
-
-and digital pins (pins 4, 6, 8, 9, 10, and 12 can be used for analog)
-
-*/
 int previous_direction = 0;
 int val_direction = 0;
 int step_direction = 0;
 int dutycycle = 50;
 float maxPower = 0, minPower = 99 , avgPower = 0 , totalE = 0 , power = 0;
-float read_voltage = 0;
-float read_current = 0;
-float prev_power = 0;
+float read_voltage = 0.0;
+float read_current = 0.0;
+float prev_power = 0.0;
+int facing = 0; 
+int degree = 0;
+int  serial_write = 50;
+float power_after = 0.0;
+float current_after_boost = 0.0;
+float load_voltage = 0.0;
+float load_voltage_sum = 0.0;
+float read_current_sum = 0.0;
+float read_voltage_sum = 0.0;
+int high_enough = 0;
+int n = 0;
+float power_after_sum = 0.0;
+int i = 0;
+
+
+// -------------------------  //
+// PWM HARDWARE TIMER CONFIG  // -------- -------- -------- -------- -------- 
+// -------------------------- //
+// Configure the PWM clock
+// The argument is one of the 7 previously defined modes
+void pwm613configure(int mode)
+{
+  // TCCR4A configuration
+  TCCR4A=0;
+  // TCCR4B configuration
+  TCCR4B=mode;
+  // TCCR4C configuration
+  TCCR4C=0;
+  // TCCR4D configuration
+  TCCR4D=0;
+  // TCCR4D configuration
+  TCCR4D=0;
+  // PLL Configuration
+  // Use 96MHz / 2 = 48MHz
+  PLLFRQ=(PLLFRQ&0xCF)|0x30;
+  // PLLFRQ=(PLLFRQ&0xCF)|0x10; // Will double all frequencies
+  // Terminal count for Timer 4 PWM
+  OCR4C=255;
+}
+
+// -------- //
+// PWM SET  // -------- -------- -------- -------- -------- -------- 
+// -------- //
+// Set PWM to D9
+// Argument is PWM between 0 and 255
+// Set PWM to D13 (Timer4 A)
+// Argument is PWM between 0 and 255
+//void pwmSet13(int value)
+//{
+//OCR4A=value;   // Set PWM value
+//DDRC|=1<<7;    // Set Output Mode C7
+//TCCR4A=0x82;  // Activate channel A
+//}
+
+void pwmSet6(int value)
+{
+OCR4D=value;   // Set PWM value
+DDRD|=1<<7;    // Set Output Mode D7
+TCCR4C|=0x09;  // Activate channel D
+}
 
 
 // ------------  //
-// INITIAL SETUP //
+// INITIAL SETUP // -------- -------- -------- -------- -------- -------- -------- 
 // ------------- //
 
 void setup(void)
 {
-  Timer1.initialize(500000);
-  Timer1.attachInterrupt(turbine_ISR); // blinkLED to run every 0.15 seconds
+  Timer1.initialize(150000); //interrupt every 0.15 seconds
+  Timer1.attachInterrupt(turbine_ISR); 
   // stepper.setSpeed(10); 
-  pwm613configure(PWM94k); // configure pin 9 for PWM using hardware registers
+  pwm613configure(PWM94k); // configure pin 6 for PWM using hardware registers at 94kHz
   Serial.begin(9600);
   Serial1.begin(9600);
     while (!Serial1) {}
@@ -100,109 +163,142 @@ void setup(void)
   altSerial.begin(9600);
 }
 
-
-// ---  //
-// ISR //
-// --- //
-
-void turbine_ISR() {
-  change_step_ISR(); //update all values every 0.5 seconds
-  change_PWM();
-  print_bt();
-}
-
-void change_step_ISR(void)
-{
-
-  if ( stepperX.stepsToGo() == 0 && abs(step_direction) > 100){ // If stepsToGo returns 0 the stepper is not moving
-    stepperX.move(step_direction/5);
-    previous_direction = val_direction;
-  } 
-}
-
 // --------  //
-// MAIN LOOP //
+// MAIN LOOP //  -------- -------- -------- -------- -------- -------- -------- 
 // --------- //
 
 void loop(void)
 {
-  
   stepperX.run(); // have to run for the nonblocking motor 
-  read_direc();// get all values
- 
+  read_direc(); // get all values 
+  
+//    Serial.print("Current Before: ");
+//    Serial.println(read_current, 5);
+//    Serial.print("Voltage Before: ");
+//    Serial.println(read_voltage, 5);
+//    Serial.print("Current After: ");
+//    Serial.println(current_after_boost, 5);
+//    Serial.print("Voltage After: ");
+//    Serial.println(load_voltage);
+//    Serial.print("Power After: ");
+//    Serial.println(power_after, 5);
+//    Serial.print("Duty: ");
+//    Serial.println(dutycycle); 
+//      //  delay(500);//delay for visual
 }
 
 // ------------------------  //
-// READ CURRENT AND VOLTAGE  //
+// READ CURRENT AND VOLTAGE  //  -------- -------- -------- -------- -------- -------- -------- 
 // ------------------------- //
 
-int digvolt(int digital) {
-    return digital*5/1023*1000;
+float digvolt(int digital) {
+    return digital*5.0/1023.0; // digital to voltage
 }
 
-int digcurr(int digital) {
-    return (10.639*digital - 26.643)*1000;
-}
-
-int toDegree(int step) {
-  // 200 steps and 360 degrees
-  // 1.8 degrees/step
-  // calculate degrees away from origin (0 degrees depending on position of motor)  
+float digcurr(float digital) {
+    return (-1.0838*digital + 2.6797); // current sensor equation experimentally found
 }
 
 void read_direc() {
+  // read direction
+  
   val_direction = analogRead(DIRECPIN);
+  //read difference in direction
   step_direction = val_direction - previous_direction; 
-  read_voltage = digvolt(analogRead(INITIAL_VOLTAGE));
- // read_current = digcurr(analogRead(INITIAL_CURRENT));
+  
+//  read_voltage =  digvolt(analogRead(INITIAL_VOLTAGE))*3.0;
+//  read_current =  digcurr(digvolt(analogRead(INITIAL_CURRENT)));
+//  load_voltage = analogRead(LOAD_VOLTAGE) * (5.0/1023.0) * 9.3;
+
+  read_voltage_sum = read_voltage_sum + digvolt(analogRead(INITIAL_VOLTAGE))*3.0;
+  read_current_sum = read_current_sum +  digcurr(digvolt(analogRead(INITIAL_CURRENT)));
+  load_voltage_sum = load_voltage_sum + analogRead(LOAD_VOLTAGE) * (5.0/1023.0) * 9.3;
+  
+ n = n + 1;
+
+  if (n==100) {
+    read_voltage = read_voltage_sum/100.0;
+    read_current = read_current_sum/100.0;
+    load_voltage = load_voltage_sum/100.0;
+    
+    n=0;
+    read_voltage_sum = 0.0;
+    read_current_sum = 0.0;
+    load_voltage_sum = 0.0;
+  }
+
+  current_after_boost = load_voltage / LOAD_RESISTANCE;
+
+  
+  i = i+1;
+
+  power_after_sum = (read_current*read_voltage) + power_after_sum;
+
+  if (i == 100) {
+      power_after = power_after_sum/100.0;
+      power_after_sum = 0.0;
+      i = 0;
+   }
+
+  power = power_after;
+ 
 }
 
-// BONUS FEATURE configure single or parallel
-void changeStator() {
-  if (read_voltage <= 2500) {// voltage * 1000 
-    digitalWrite(10, LOW);
-    digitalWrite(11, LOW);
-    digitalWrite(12, LOW);
-  }
-  else {
-    digitalWrite(10, HIGH);
-    digitalWrite(11, HIGH);
-    digitalWrite(12, HIGH); 
-  }
+// ---  //
+// ISR // -------- -------- -------- -------- -------- -------- -------- -------- -------- 
+// --- //
+
+void turbine_ISR() {
+  change_step(); // direction control
+  change_PWM();  // PWM control
+  print_bt();    // serial control
+}
+
+void change_step(void)
+{
+  if ( stepperX.stepsToGo() == 0 && abs(step_direction) > 50){ // If stepsToGo returns 0 the stepper is not moving
+    stepperX.move(step_direction/4.5);
+    previous_direction = val_direction;
+    degree = 0.204*val_direction - 104;
+  } 
 }
 
 // ------------------------  //
 // CHANGE PWM DEPNT ON POWER  //
 // ------------------------- //
 void change_PWM() {
-  read_current = 0.4;
-  power = read_voltage * read_current;
-  //for demo
-  //power = read_voltage;
   
-if (power > (prev_power + 5)) {
-    dutycycle = dutycycle + 3;
-    prev_power = power;
-}
-
-else if (power < (prev_power - 5)) {
-    dutycycle = dutycycle - 3;
-    prev_power = power;
-}
-
-else {
-  dutycycle = dutycycle; // max or min duty then don't change or if power is the same
-}
-
-if (dutycycle < 20) dutycycle = 20;
-if (dutycycle > 80) dutycycle = 80;
-    
-  if(maxPower < power) maxPower = power;
+  // wait till voltage has reached 10 Volts (is spinning fast enough after starting up) once to start changing duty cycle
+  if (load_voltage > 10) {
+    high_enough = 1;
+  }
   
+  if (high_enough) {
+      if (power > (prev_power + POWER_DIFF)) { // increase duty cycle when power is greater than previous power
+          dutycycle = dutycycle + 1;
+          prev_power = power;
+      }
+      
+      else if (power < (prev_power - POWER_DIFF)) { // decrease duty cycle when power is less than previous power
+          dutycycle = dutycycle - 1;
+          prev_power = power;
+      }
+      
+      else {
+        dutycycle = dutycycle; // max or min duty then don't change or if power is the same
+      }
+  }
+      // set pin 13 for PWM output to boost converter
+
+  // max and min duty cycle that the boost is capable of taking
+  if (dutycycle < 20) dutycycle = 20; 
+  if (dutycycle > 80) dutycycle = 80;
+      
+  if(maxPower < power) maxPower = power;  
   if(minPower > power) minPower = power;
-  
-  // set pin 13 for PWM output to boost converter
-  pwmSet13(DUTY2PWM(dutycycle));  
+
+  pwmSet6(DUTY2PWM(dutycycle));  
+
 }
 
 int currentMillis;
@@ -212,61 +308,28 @@ int currentMillis;
 
 void print_bt() {
   /* SERIAL PRINTING TO BLUETOOTH */
-   change_step_ISR();
+ 
 /* calculations, average wind speed and average direction? Maximum power*/
-    avgPower = float((maxPower + minPower)/2/1000);
+  //  avgPower = float((maxPower + minPower)/2/1000);
    // currentMillis = millis()/1000;
     //totalE = power*currentMillis;
+//    Serial.print("Current Before: ");
+//    Serial.println(read_current, 5);
+//    Serial.print("Voltage Before: ");
+//    Serial.println(read_voltage, 5);
+//    Serial.print("Current After: ");
+//    Serial.println(current_after_boost, 5);
+//    Serial.print("Voltage After: ");
+//    Serial.println(load_voltage, 5);
+//    Serial.print("Power After: ");
+//    Serial.println(power_after, 5);
+//    Serial.print("Duty: ");
+//    Serial.println(dutycycle);    
+   
+    String powervals = String(power_after)  + ',' + String(dutycycle)  + ',' + String(load_voltage)+','+ String(degree);    
+    String powervals_bt = String(power_after)  + ','+ String(load_voltage)  + ',' + String(read_current)+','+ String(degree)+';';    
 
-    String powervals = String(avgPower)  + ',' + String(float(power)/1000)  + ',' + String(float(read_voltage)/1000)+','+ String(val_direction);    
-    String powervals_bt = String(avgPower)  + ','+ String(float(power)/1000)  + ',' + String(float(read_voltage)/1000)+','+ String(val_direction)+';';    
-
-    altSerial.println(powervals_bt); 
-    Serial.println(powervals);
-
-}
-
-// -------------------------  //
-// PWM HARDWARE TIMER CONFIG  //
-// -------------------------- //
-// Configure the PWM clock
-// The argument is one of the 7 previously defined modes
-void pwm613configure(int mode)
-{
-// TCCR4A configuration
-TCCR4A=0;
-
-// TCCR4B configuration
-TCCR4B=mode;
-
-// TCCR4C configuration
-TCCR4C=0;
-
-// TCCR4D configuration
-TCCR4D=0;
-
-// TCCR4D configuration
-TCCR4D=0;
-
-// PLL Configuration
-// Use 96MHz / 2 = 48MHz
-PLLFRQ=(PLLFRQ&0xCF)|0x30;
-// PLLFRQ=(PLLFRQ&0xCF)|0x10; // Will double all frequencies
-
-// Terminal count for Timer 4 PWM
-OCR4C=255;
-}
-
-// -------- //
-// PWM SET  //
-// -------- //
-// Set PWM to D9
-// Argument is PWM between 0 and 255
-// Set PWM to D13 (Timer4 A)
-// Argument is PWM between 0 and 255
-void pwmSet13(int value)
-{
-OCR4A=value;   // Set PWM value
-DDRC|=1<<7;    // Set Output Mode C7
-TCCR4A=0x82;  // Activate channel A
+   altSerial.println(powervals_bt); 
+    
+    Serial.println(powervals); // print to python Serial
 }
