@@ -34,7 +34,6 @@ and digital pins (pins 4, 6, 8, 9, 10, and 12 can be used for analog)
 #include <Unistep2.h> // non blocking stepper motor
 #include <AltSoftSerial.h>
 
-
 /*http://r6500.blogspot.com/2014/12/fast-pwm-on-arduino-leonardo.html */
 // Frequency modes for TIMER4
 #define PWM187k 1   // 187500 Hz
@@ -62,8 +61,6 @@ and digital pins (pins 4, 6, 8, 9, 10, and 12 can be used for analog)
 
 #define POWER_DIFF 0.05
 #define LOAD_RESISTANCE 100
-
-
 
 Unistep2 stepperX(2,4,3,7, STEPS, 10000); // non blocking bipolar stepper motor
     // connections with the L298
@@ -97,6 +94,8 @@ int high_enough = 0;
 int n = 0;
 float power_after_sum = 0.0;
 int i = 0;
+int inc = 1;
+int dec = 0;
 
 
 // -------------------------  //
@@ -229,18 +228,17 @@ void read_direc() {
 
   current_after_boost = load_voltage / LOAD_RESISTANCE;
 
-  
   i = i+1;
 
-  power_after_sum = (read_current*read_voltage) + power_after_sum;
+  power = (read_current*read_voltage); 
+
+  power_after_sum = (load_voltage/LOAD_RESISTANCE) + power_after_sum;
 
   if (i == 100) {
       power_after = power_after_sum/100.0;
       power_after_sum = 0.0;
       i = 0;
    }
-
-  power = power_after;
  
 }
 
@@ -264,7 +262,7 @@ void change_step(void)
 }
 
 // ------------------------  //
-// CHANGE PWM DEPNT ON POWER  //
+// CHANGE PWM DEPNT ON POWER  // -------- -------- -------- -------- -------- -------- -------- 
 // ------------------------- //
 void change_PWM() {
   
@@ -273,22 +271,45 @@ void change_PWM() {
     high_enough = 1;
   }
   
+  if (load_voltage < 5) { // when turning off 
+    high_enough = 0;
+  }
+
   if (high_enough) {
-      if (power > (prev_power + POWER_DIFF)) { // increase duty cycle when power is greater than previous power
+
+      if (power > (prev_power + POWER_DIFF) && inc) { // increase duty cycle when power is greater than previous power and rising
           dutycycle = dutycycle + 1;
           prev_power = power;
+          inc = 1;
+          dec = 0;
       }
       
-      else if (power < (prev_power - POWER_DIFF)) { // decrease duty cycle when power is less than previous power
+      else if (power < (prev_power - POWER_DIFF) && inc) { // decrease duty cycle when power is less than previous power when rising
           dutycycle = dutycycle - 1;
           prev_power = power;
+          dec = 1;
+          inc = 0;
+      }
+
+      else if (power < (prev_power - POWER_DIFF) && dec) { // increase duty cycle when power is less than previous power when decreasing 
+          dutycycle = dutycycle + 1;
+          prev_power = power;
+          inc = 1;
+          dec = 0;
+      }
+
+      else if (power > (prev_power - POWER_DIFF) && dec) { // decrease duty cycle when power is greater than previous power when decreasing
+          dutycycle = dutycycle - 1;
+          prev_power = power;
+          dec = 1;
+          inc = 0;
       }
       
       else {
         dutycycle = dutycycle; // max or min duty then don't change or if power is the same
       }
   }
-      // set pin 13 for PWM output to boost converter
+      // set pin 6 for PWM output to boost converter
 
   // max and min duty cycle that the boost is capable of taking
   if (dutycycle < 20) dutycycle = 20; 
@@ -303,15 +324,14 @@ void change_PWM() {
 
 int currentMillis;
 // ------------------------  //
-// BLUETOOTH SERIAL PRINT    //
+// BLUETOOTH SERIAL PRINT    // -------- -------- -------- -------- -------- -------- -------- -------- -------- 
 // ------------------------- //
 
 void print_bt() {
   /* SERIAL PRINTING TO BLUETOOTH */
  
 /* calculations, average wind speed and average direction? Maximum power*/
-  //  avgPower = float((maxPower + minPower)/2/1000);
-   // currentMillis = millis()/1000;
+    // currentMillis = millis()/1000;
     //totalE = power*currentMillis;
 //    Serial.print("Current Before: ");
 //    Serial.println(read_current, 5);
@@ -326,10 +346,12 @@ void print_bt() {
 //    Serial.print("Duty: ");
 //    Serial.println(dutycycle);    
    
-    String powervals = String(power_after)  + ',' + String(dutycycle)  + ',' + String(load_voltage)+','+ String(degree);    
-    String powervals_bt = String(power_after)  + ','+ String(load_voltage)  + ',' + String(read_current)+','+ String(degree)+';';    
+    String powervals = String(power_after)  + ',' + String(dutycycle)  + ',' + String(load_voltage)+ ',' + String(degree) ',' 
+        + String(read_current)  ',' + String(power) ',' + String(read_voltage) ',' + String(current_after_boost);  
 
-   altSerial.println(powervals_bt); 
+    String powervals_bt = String(power_after)  + ','+ String(load_voltage)  + ',' + String(read_current)+','+ String(degree) + ';';    
+
+    //altSerial.println(powervals_bt); 
     
     Serial.println(powervals); // print to python Serial
 }
