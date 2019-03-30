@@ -59,7 +59,7 @@ and digital pins (pins 4, 6, 8, 9, 10, and 12 can be used for analog)
 #define INITIAL_VOLTAGE 1
 #define INITIAL_CURRENT 2
 
-#define POWER_DIFF 0.05
+#define POWER_DIFF 0.1
 #define LOAD_RESISTANCE 100
 
 Unistep2 stepperX(2,4,3,7, STEPS, 10000); // non blocking bipolar stepper motor
@@ -144,14 +144,13 @@ DDRD|=1<<7;    // Set Output Mode D7
 TCCR4C|=0x09;  // Activate channel D
 }
 
-
 // ------------  //
 // INITIAL SETUP // -------- -------- -------- -------- -------- -------- -------- 
 // ------------- //
 
 void setup(void)
 {
-  Timer1.initialize(150000); //interrupt every 0.15 seconds
+  Timer1.initialize(1000000); //interrupt every 0.15 seconds
   Timer1.attachInterrupt(turbine_ISR); 
   // stepper.setSpeed(10); 
   pwm613configure(PWM94k); // configure pin 6 for PWM using hardware registers at 94kHz
@@ -170,7 +169,7 @@ void loop(void)
 {
   stepperX.run(); // have to run for the nonblocking motor 
   read_direc(); // get all values 
-  
+//  
 //    Serial.print("Current Before: ");
 //    Serial.println(read_current, 5);
 //    Serial.print("Voltage Before: ");
@@ -183,7 +182,7 @@ void loop(void)
 //    Serial.println(power_after, 5);
 //    Serial.print("Duty: ");
 //    Serial.println(dutycycle); 
-//      //  delay(500);//delay for visual
+//  delay(10);//delay for visual
 }
 
 // ------------------------  //
@@ -195,7 +194,7 @@ float digvolt(int digital) {
 }
 
 float digcurr(float digital) {
-    return (-1.0838*digital + 2.6797); // current sensor equation experimentally found
+    return (-1.0778*digital + 2.6541); // current sensor equation experimentally found
 }
 
 void read_direc() {
@@ -207,6 +206,7 @@ void read_direc() {
   
 //  read_voltage =  digvolt(analogRead(INITIAL_VOLTAGE))*3.0;
 //  read_current =  digcurr(digvolt(analogRead(INITIAL_CURRENT)));
+//  if (read_current < 0) read_current = 0;
 //  load_voltage = analogRead(LOAD_VOLTAGE) * (5.0/1023.0) * 9.3;
 
   read_voltage_sum = read_voltage_sum + digvolt(analogRead(INITIAL_VOLTAGE))*3.0;
@@ -218,6 +218,7 @@ void read_direc() {
   if (n==100) {
     read_voltage = read_voltage_sum/100.0;
     read_current = read_current_sum/100.0;
+    if(read_current < 0 ) read_current = 0;
     load_voltage = load_voltage_sum/100.0;
     
     n=0;
@@ -259,6 +260,7 @@ void change_step(void)
     previous_direction = val_direction;
     degree = 0.204*val_direction - 104;
   } 
+  
 }
 
 // ------------------------  //
@@ -298,7 +300,7 @@ void change_PWM() {
           dec = 0;
       }
 
-      else if (power > (prev_power - POWER_DIFF) && dec) { // decrease duty cycle when power is greater than previous power when decreasing
+      else if (power > (prev_power + POWER_DIFF) && dec) { // decrease duty cycle when power is greater than previous power when decreasing
           dutycycle = dutycycle - 1;
           prev_power = power;
           dec = 1;
@@ -334,7 +336,7 @@ void print_bt() {
     // currentMillis = millis()/1000;
     //totalE = power*currentMillis;
 //    Serial.print("Current Before: ");
-//    Serial.println(read_current, 5);
+//   Serial.println(read_current, 5);
 //    Serial.print("Voltage Before: ");
 //    Serial.println(read_voltage, 5);
 //    Serial.print("Current After: ");
@@ -346,12 +348,11 @@ void print_bt() {
 //    Serial.print("Duty: ");
 //    Serial.println(dutycycle);    
    
-    String powervals = String(power_after)  + ',' + String(dutycycle)  + ',' + String(load_voltage)+ ',' + String(degree) ',' 
-        + String(read_current)  ',' + String(power) ',' + String(read_voltage) ',' + String(current_after_boost);  
+    String powervals = String(power_after)  + ',' + String(dutycycle)  + ',' + String(load_voltage)+ ',' + String(degree)+ ',' + String(read_current) + ',' + String(power) + ',' + String(read_voltage)+ ',' + String(current_after_boost);  
 
     String powervals_bt = String(power_after)  + ','+ String(load_voltage)  + ',' + String(read_current)+','+ String(degree) + ';';    
 
     //altSerial.println(powervals_bt); 
     
-    Serial.println(powervals); // print to python Serial
+  Serial.println(powervals); // print to python Serial
 }

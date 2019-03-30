@@ -22,25 +22,32 @@ view.setWindowTitle('Live plots of turbine data')
 
 graphic.addLabel('Raw signal', colspan=4)
 
-datafile = open( "dutyvspower.txt", "w+")
-datafile.write("duty, power\n")
+datafile = open( "values.txt", "w+")
+datafile.write("power cycle, power after, load voltage, degree, current, power, voltage, load current\n")
 
 # First row of plots
 graphic.nextRow()
 p1 = graphic.addPlot(title="Duty", labels={'left':'%', 'bottom':'Time'})
 p2 = graphic.addPlot(title="Voltage at Load", labels={'left':'Voltage', 'bottom':'Time'})
-p3 = graphic.addPlot(title="Degree", labels={'left':'Degree', 'bottom':'Time'})
+p3 = graphic.addPlot(title="Power ", labels={'left':'Degree', 'bottom':'Time'})
 
 # Second row of plots 
 graphic.nextRow()
-p4 = graphic.addPlot(title="Power", labels={'left':'Watts', 'bottom':'Time'}, colspan = 2)
-p5 = graphic.addPlot(title="Running Average", labels={'left':'Watts', 'bottom':'Time'}, colspan = 2)
+p4 = graphic.addPlot(title="Power After", labels={'left':'Watts', 'bottom':'Time'})
+p5 = graphic.addPlot(title="Current", labels={'left':'Watts', 'bottom':'Time'})
 
 p1.showGrid(x=None, y=True, alpha=None)
 p2.showGrid(x=None, y=True, alpha=None)
 p3.showGrid(x=None, y=True, alpha=None)
 p4.showGrid(x=None, y=True, alpha=None)
 p5.showGrid(x=None, y=True, alpha=None)
+
+p1.setRange(yRange=[20,80])
+p2.setRange(yRange=[0,20])
+p3.setRange(yRange=[0,3])
+p4.setRange(yRange=[0,3])
+p5.setRange(yRange=[0,0.5])
+
 
 curve1 = p1.plot()
 curve2 = p2.plot()
@@ -65,17 +72,16 @@ def read_data():
 	data = ser.readline().decode()
 	while data.isspace(): # if faulty reading (whitespace), keep trying
 		data = ser.readline().decode()
+	datafile.write(data)
 	return list(map(float, data.split(",")))
 	# Values comming in as power, duty cycle, load voltage and degree
 	# String powervals = String(power_after)  + ',' + String(dutycycle)  + ',' + String(load_voltage)+ ',' + String(degree) ',' + String(read_current)  ',' + String(power) ',' + String(read_voltage) ',' + String(read_voltage);  
 # Update values on graph
 def update():
-	global ptr
+	global ptr, data_array, Xn1, Xn2, Xn3, Xn4, Xn5, curve1, curve2, curve3, curve4, curve5
 	data_array = read_data()
 	power_average.append(data_array[0])
-	
-	datafile.write(data_array[1] + ',' + data_array[0] + '\n') # write duty and power to a file
-	
+		
 	Xn1[:-1] = Xn1[1:]
 	Xn2[:-1] = Xn2[1:]
 	Xn3[:-1] = Xn3[1:]
@@ -84,9 +90,9 @@ def update():
 
 	value1 =  data_array[1] # duty
 	value2 = data_array[2] # load volt
-	value3 = data_array[3] # direction
+	value3 = data_array[5] # direction
 	value4 = data_array[0] # power
-	value5 = sum(power_average)/len(power_average) 
+	value5 = data_array[4] 
 	#avgPower = sum(power_average/len(power_average))
 
 	try: 
@@ -116,19 +122,24 @@ timer = QtCore.QTimer()
 timer.timeout.connect(update)
 timer.start(0)
 
+def print_values():
+	vals = read_data()
+	print(vals)
+	print("Current Before:", data_array[4])
+	print("Voltage Before:", data_array[6])
+	print("Current After: ", data_array[7])
+	print("Voltage After: ", data_array[2])
+	print("Power After: ", data_array[0])
+	print("Power Before:", data_array[5])
+	print("Duty: ", data_array[1])	
+	#cp = data_array[0]/(0.5*1.225*A*V^3)
+	#print("CP: %f\n", cp)
+	#os.system('clear')
 # Main program: executes the update function and updates the graph
+
 while True: 
 	update()
 	print_values()
 
 pg.QtGui.QApplication.exec_()
 
-def print_values():
-	print("Current Before: %f\n", data_array[4])
-	print("Voltage Before: %f\n", data_array[6])
-	print("Current After: %f\n", data_array[7])
-	print("Voltage After: %f\n", data_array[2])
-	print("Power After: %f\n", data_array[0])
-	print("Power Before: %f\n", data_array[5])
-	print("Duty: %f\n", data_array[1])	
-	os.system('clear')
