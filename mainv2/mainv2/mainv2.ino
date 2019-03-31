@@ -54,13 +54,17 @@ and digital pins (pins 4, 6, 8, 9, 10, and 12 can be used for analog)
 
 #define STEPS 200 // the number of steps in one revolution of your motor (28BYJ-48)
 
-#define DIRECPIN 3 
+#define DIRECPIN 4 
 #define LOAD_VOLTAGE 0
 #define INITIAL_VOLTAGE 1
 #define INITIAL_CURRENT 2
 
-#define POWER_DIFF 0.1
-#define LOAD_RESISTANCE 100
+#define POWER_DIFF 0.025
+#define LOAD_RESISTANCE 100.0
+
+#define center_low 2.85
+#define center_high 3.0
+#define wanted_center 2.9
 
 Unistep2 stepperX(2,4,3,7, STEPS, 10000); // non blocking bipolar stepper motor
     // connections with the L298
@@ -87,15 +91,24 @@ int  serial_write = 50;
 float power_after = 0.0;
 float current_after_boost = 0.0;
 float load_voltage = 0.0;
+float prev_load_voltage = 0.0;
+
 float load_voltage_sum = 0.0;
 float read_current_sum = 0.0;
 float read_voltage_sum = 0.0;
+float current_position_sum = 0.0;
 int high_enough = 0;
 int n = 0;
 float power_after_sum = 0.0;
 int i = 0;
 int inc = 1;
 int dec = 0;
+int t = 0;
+int s = 0;
+
+int change_position = 0;
+float current_position = 0;
+float difference_between = 0;
 
 
 // -------------------------  //
@@ -150,7 +163,7 @@ TCCR4C|=0x09;  // Activate channel D
 
 void setup(void)
 {
-  Timer1.initialize(1000000); //interrupt every 0.15 seconds
+  Timer1.initialize(100000); //interrupt every 0.1 second
   Timer1.attachInterrupt(turbine_ISR); 
   // stepper.setSpeed(10); 
   pwm613configure(PWM94k); // configure pin 6 for PWM using hardware registers at 94kHz
@@ -169,6 +182,8 @@ void loop(void)
 {
   stepperX.run(); // have to run for the nonblocking motor 
   read_direc(); // get all values 
+  //print_bt();    // serial control
+
 //  
 //    Serial.print("Current Before: ");
 //    Serial.println(read_current, 5);
@@ -182,6 +197,13 @@ void loop(void)
 //    Serial.println(power_after, 5);
 //    Serial.print("Duty: ");
 //    Serial.println(dutycycle); 
+//    Serial.print("Direction: ");
+   // Serial.println(difference_between*1023/5/4.5); 
+  //  Serial.println(difference_between);
+  //  Serial.println(change_position);
+//    Serial.println(current_position);
+//    Serial.println();
+//    Serial.println(degree); 
 //  delay(10);//delay for visual
 }
 
@@ -199,7 +221,7 @@ float digcurr(float digital) {
 
 void read_direc() {
   // read direction
-  
+
   val_direction = analogRead(DIRECPIN);
   //read difference in direction
   step_direction = val_direction - previous_direction; 
@@ -212,7 +234,8 @@ void read_direc() {
   read_voltage_sum = read_voltage_sum + digvolt(analogRead(INITIAL_VOLTAGE))*3.0;
   read_current_sum = read_current_sum +  digcurr(digvolt(analogRead(INITIAL_CURRENT)));
   load_voltage_sum = load_voltage_sum + analogRead(LOAD_VOLTAGE) * (5.0/1023.0) * 9.3;
-  
+  current_position_sum = digvolt(analogRead(4)) + current_position_sum;
+
  n = n + 1;
 
   if (n==100) {
@@ -220,11 +243,13 @@ void read_direc() {
     read_current = read_current_sum/100.0;
     if(read_current < 0 ) read_current = 0;
     load_voltage = load_voltage_sum/100.0;
+    current_position = current_position_sum/100;
     
     n=0;
     read_voltage_sum = 0.0;
     read_current_sum = 0.0;
     load_voltage_sum = 0.0;
+    current_position_sum = 0.0;
   }
 
   current_after_boost = load_voltage / LOAD_RESISTANCE;
@@ -233,13 +258,20 @@ void read_direc() {
 
   power = (read_current*read_voltage); 
 
-  power_after_sum = (load_voltage/LOAD_RESISTANCE) + power_after_sum;
+  power_after_sum = (load_voltage * load_voltage / LOAD_RESISTANCE) + power_after_sum;
 
   if (i == 100) {
       power_after = power_after_sum/100.0;
       power_after_sum = 0.0;
       i = 0;
    }
+
+  t = t+1;
+  
+  if (t == 5000) {
+    prev_load_voltage = load_voltage;
+    t = 0; 
+  }
  
 }
 
@@ -249,59 +281,80 @@ void read_direc() {
 
 void turbine_ISR() {
   change_step(); // direction control
-  change_PWM();  // PWM control
-  print_bt();    // serial control
+  
+  if (s == 400) {
+    change_PWM();  // PWM control
+    s = 0;
+  }
+  s = s+1;
+  
+  print_bt();
 }
 
 void change_step(void)
 {
-  if ( stepperX.stepsToGo() == 0 && abs(step_direction) > 50){ // If stepsToGo returns 0 the stepper is not moving
-    stepperX.move(step_direction/4.5);
-    previous_direction = val_direction;
-    degree = 0.204*val_direction - 104;
-  } 
-  
+  check_d();
+    if ( stepperX.stepsToGo() == 0 and (current_position < center_low)){ // If stepsToGo returns 0 the stepper is not moving
+      stepperX.move(1);  
+    } 
+    if ( stepperX.stepsToGo() == 0 and (current_position > center_high)){ // If stepsToGo returns 0 the stepper is not moving
+      stepperX.move(-1);  
+    } 
 }
+
+
+void check_d() {
+  
+  
+//  if( or (current_position > center_high)) {
+//    change_position = 1;
+//    difference_between = wanted_center - current_position;
+//  }
+//  else change_position = 0;
+} 
 
 // ------------------------  //
 // CHANGE PWM DEPNT ON POWER  // -------- -------- -------- -------- -------- -------- -------- 
 // ------------------------- //
 void change_PWM() {
   
-  // wait till voltage has reached 10 Volts (is spinning fast enough after starting up) once to start changing duty cycle
-  if (load_voltage > 10) {
-    high_enough = 1;
+  // wait till voltage has reached 10 Volts (is spinning fast enough after starting up) once to start changing duty cycle ; and wait to stabilize
+  if (load_voltage > 10 && (abs(prev_load_voltage - load_voltage) < 0.5)) {
+    high_enough = 1; //   
+  }  
+  else {
+    high_enough = 0;
   }
   
-  if (load_voltage < 5) { // when turning off 
+  if (load_voltage < 7) { // when turning off 
     high_enough = 0;
   }
 
   if (high_enough) {
 
       if (power > (prev_power + POWER_DIFF) && inc) { // increase duty cycle when power is greater than previous power and rising
-          dutycycle = dutycycle + 1;
+          dutycycle = dutycycle + 2;
           prev_power = power;
           inc = 1;
           dec = 0;
       }
       
       else if (power < (prev_power - POWER_DIFF) && inc) { // decrease duty cycle when power is less than previous power when rising
-          dutycycle = dutycycle - 1;
+          dutycycle = dutycycle - 2;
           prev_power = power;
           dec = 1;
           inc = 0;
       }
 
       else if (power < (prev_power - POWER_DIFF) && dec) { // increase duty cycle when power is less than previous power when decreasing 
-          dutycycle = dutycycle + 1;
+          dutycycle = dutycycle + 2;
           prev_power = power;
           inc = 1;
           dec = 0;
       }
 
       else if (power > (prev_power + POWER_DIFF) && dec) { // decrease duty cycle when power is greater than previous power when decreasing
-          dutycycle = dutycycle - 1;
+          dutycycle = dutycycle - 2;
           prev_power = power;
           dec = 1;
           inc = 0;
@@ -314,8 +367,8 @@ void change_PWM() {
       // set pin 6 for PWM output to boost converter
 
   // max and min duty cycle that the boost is capable of taking
-  if (dutycycle < 20) dutycycle = 20; 
-  if (dutycycle > 80) dutycycle = 80;
+  if (dutycycle < 30) dutycycle = 30; 
+  if (dutycycle > 75) dutycycle = 75;
       
   if(maxPower < power) maxPower = power;  
   if(minPower > power) minPower = power;
@@ -348,7 +401,7 @@ void print_bt() {
 //    Serial.print("Duty: ");
 //    Serial.println(dutycycle);    
    
-    String powervals = String(power_after)  + ',' + String(dutycycle)  + ',' + String(load_voltage)+ ',' + String(degree)+ ',' + String(read_current) + ',' + String(power) + ',' + String(read_voltage)+ ',' + String(current_after_boost);  
+    String powervals = String(power_after, 4)  + ',' + String(dutycycle)  + ',' + String(load_voltage, 4)+ ',' + String(prev_load_voltage)+ ',' + String(read_current, 4) + ',' + String(power, 4) + ',' + String(read_voltage, 4)+ ',' + String(current_position);  
 
     String powervals_bt = String(power_after)  + ','+ String(load_voltage)  + ',' + String(read_current)+','+ String(degree) + ';';    
 

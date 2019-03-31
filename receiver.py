@@ -6,7 +6,6 @@ import time
 import serial 
 import os
 
-
 port_name = "COM5"
 baudrate = 9600
 ser = serial.Serial(port_name,baudrate)
@@ -22,8 +21,11 @@ view.setWindowTitle('Live plots of turbine data')
 
 graphic.addLabel('Raw signal', colspan=4)
 
-datafile = open( "values.txt", "w+")
-datafile.write("power cycle, power after, load voltage, degree, current, power, voltage, load current\n")
+
+timestring = time.strftime("%Y%m%d-%H%M%S")
+
+datafile = open( timestring + '.txt', "w+")
+datafile.write("power after, duty, load voltage, degree, current, power, voltage, load current\n")
 
 # First row of plots
 graphic.nextRow()
@@ -43,7 +45,7 @@ p4.showGrid(x=None, y=True, alpha=None)
 p5.showGrid(x=None, y=True, alpha=None)
 
 p1.setRange(yRange=[20,80])
-p2.setRange(yRange=[0,20])
+p2.setRange(yRange=[0,17])
 p3.setRange(yRange=[0,3])
 p4.setRange(yRange=[0,3])
 p5.setRange(yRange=[0,0.5])
@@ -55,7 +57,7 @@ curve3 = p3.plot()
 curve4 = p4.plot()
 curve5 = p5.plot()
 
-windowWidth = 100                      
+windowWidth = 500                      
 Xn1 = np.linspace(0,0,windowWidth)
 Xn2 = np.linspace(0,0,windowWidth)
 Xn3 = np.linspace(0,0,windowWidth)
@@ -123,23 +125,25 @@ timer.timeout.connect(update)
 timer.start(0)
 
 def print_values():
-	vals = read_data()
-	print(vals)
-	print("Current Before:", data_array[4])
-	print("Voltage Before:", data_array[6])
-	print("Current After: ", data_array[7])
-	print("Voltage After: ", data_array[2])
-	print("Power After: ", data_array[0])
-	print("Power Before:", data_array[5])
-	print("Duty: ", data_array[1])	
+	
+	print("Current Before:", str.format('{0:.3f}', data_array[4]))
+	print("Voltage Before:", str.format('{0:.3f}',data_array[6]))
+	print("High Enough: ", str.format('{0:.3f}',data_array[7]))
+	print("Voltage After: ", str.format('{0:.3f}',data_array[2]))
+	print("Power After: ", str.format('{0:.3f}',data_array[0]))
+	print("Power Before:", str.format('{0:.3f}',data_array[5]))
+	print("Duty: ",data_array[1])
+	print("Prev Load V: ",data_array[3])	
+	#os.system('cls')
 	#cp = data_array[0]/(0.5*1.225*A*V^3)
 	#print("CP: %f\n", cp)
-	#os.system('clear')
+	
+	
 # Main program: executes the update function and updates the graph
 
 while True: 
 	update()
 	print_values()
-
 pg.QtGui.QApplication.exec_()
+
 
