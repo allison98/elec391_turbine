@@ -59,7 +59,7 @@ and digital pins (pins 4, 6, 8, 9, 10, and 12 can be used for analog)
 #define INITIAL_VOLTAGE 1
 #define INITIAL_CURRENT 2
 
-#define POWER_DIFF 0.01
+#define POWER_DIFF 0.025
 #define LOAD_RESISTANCE 100.0
 
 #define center_low 2.85
@@ -84,8 +84,6 @@ int dutycycle = 50;
 float maxPower = 0, minPower = 99 , avgPower = 0 , totalE = 0 , power = 0;
 float read_voltage = 0.0;
 float read_current = 0.0;
-float read_voltage_avg = 0.0;
-float read_current_avg = 0.0;
 float prev_power = 0.0;
 int facing = 0; 
 int degree = 0;
@@ -93,28 +91,26 @@ int  serial_write = 50;
 float power_after = 0.0;
 float current_after_boost = 0.0;
 float load_voltage = 0.0;
-float load_voltage_avg = 0.0;
-
 float prev_load_voltage = 0.0;
 
 float load_voltage_sum = 0.0;
 float read_current_sum = 0.0;
 float read_voltage_sum = 0.0;
 float current_position_sum = 0.0;
-
-float load_voltage_sum_2 = 0.0;
-float read_current_sum_2 = 0.0;
-float read_voltage_sum_2 = 0.0;
-
-
-float power_after_sum = 0.0;
-
 int high_enough = 0;
-int n = 0, i = 0, t = 0, s = 0, v = 0;
+int n = 0;
+float power_after_sum = 0.0;
+int i = 0;
 int inc = 1;
 int dec = 0;
-
+int t = 0;
+int q = 0;
+int s = 0;
+int dutycycle_test  =55;
+int high = 0;
+int change_position = 0;
 float current_position = 0;
+float difference_between = 0;
 
 
 // -------------------------  //
@@ -188,6 +184,23 @@ void loop(void)
 {
   stepperX.run(); // have to run for the nonblocking motor 
   read_direc(); // get all values 
+
+
+  pwmSet6(DUTY2PWM(dutycycle_test));  
+  if(load_voltage > 10) {
+    high = 1;
+  }
+  //high = 1;
+  if(high) {
+    q = q+1;
+    if(q == 10000) {
+      if (dutycycle_test < 75) {
+          dutycycle_test = dutycycle_test + 1;
+          q = 0;
+      }
+      else dutycycle_test = dutycycle_test;
+    }
+  }
   //print_bt();    // serial control
 
 //  
@@ -227,6 +240,10 @@ float digcurr(float digital) {
 
 void read_direc() {
   // read direction
+
+  val_direction = analogRead(DIRECPIN);
+  //read difference in direction
+  step_direction = val_direction - previous_direction; 
   
 //  read_voltage =  digvolt(analogRead(INITIAL_VOLTAGE))*3.0;
 //  read_current =  digcurr(digvolt(analogRead(INITIAL_CURRENT)));
@@ -236,39 +253,22 @@ void read_direc() {
   read_voltage_sum = read_voltage_sum + digvolt(analogRead(INITIAL_VOLTAGE))*3.0;
   read_current_sum = read_current_sum +  digcurr(digvolt(analogRead(INITIAL_CURRENT)));
   load_voltage_sum = load_voltage_sum + analogRead(LOAD_VOLTAGE) * (5.0/1023.0) * 9.3;
-  current_position_sum = digvolt(analogRead(DIRECPIN)) + current_position_sum;
+  current_position_sum = digvolt(analogRead(4)) + current_position_sum;
 
  n = n + 1;
 
   if (n==100) {
-    read_voltage_avg = read_voltage_sum/100.0;
-    read_current_avg = read_current_sum/100.0;
-    if(read_current_avg < 0 ) read_current_avg = 0;
-    load_voltage_avg = load_voltage_sum/100.0;
+    read_voltage = read_voltage_sum/100.0;
+    read_current = read_current_sum/100.0;
+    if(read_current < 0 ) read_current = 0;
+    load_voltage = load_voltage_sum/100.0;
     current_position = current_position_sum/100;
-
-   read_voltage_sum_2 = read_voltage_sum_2 + read_voltage_avg;
-   read_current_sum_2 = read_current_sum_2 +  read_current_avg;
-   load_voltage_sum_2 = load_voltage_sum_2 + load_voltage_avg;
     
     n=0;
     read_voltage_sum = 0.0;
     read_current_sum = 0.0;
     load_voltage_sum = 0.0;
-    current_position_sum= 0.0;
-    v = v +1;
-  }
-
-  if (v == 25) {
-    read_voltage = read_voltage_sum_2/25.0;
-    read_current = read_current_sum_2/25.0;
-    if(read_current < 0 ) read_current = 0;
-    load_voltage = load_voltage_sum_2/25.0;
-    
-    v=0;
-    read_voltage_sum_2 = 0.0;
-    read_current_sum_2 = 0.0;
-    load_voltage_sum_2 = 0.0;
+    current_position_sum = 0.0;
   }
 
   current_after_boost = load_voltage / LOAD_RESISTANCE;
@@ -287,7 +287,7 @@ void read_direc() {
 
   t = t+1;
   
-  if (t == 1000) {
+  if (t == 5000) {
     prev_load_voltage = load_voltage;
     t = 0; 
   }
@@ -300,26 +300,37 @@ void read_direc() {
 
 void turbine_ISR() {
   change_step(); // direction control
+//  
+//  if (s == 400) {
+//    change_PWM();  // PWM control
+//    s = 0;
+//  }
+//  s = s+1;
   
-  if (s == 100) {
-    change_PWM();  // PWM control every 1 seconds
-    s = 0;
-  }
-  s = s+1;
-  
-  print_bt(); // print to serial
+  print_bt();
 }
 
 void change_step(void)
 {
+  check_d();
     if ( stepperX.stepsToGo() == 0 and (current_position < center_low)){ // If stepsToGo returns 0 the stepper is not moving
-      stepperX.move(1);  // move right 
+      stepperX.move(1);  
     } 
     if ( stepperX.stepsToGo() == 0 and (current_position > center_high)){ // If stepsToGo returns 0 the stepper is not moving
-      stepperX.move(-1);  // move left
+      stepperX.move(-1);  
     } 
 }
 
+
+void check_d() {
+  
+  
+//  if( or (current_position > center_high)) {
+//    change_position = 1;
+//    difference_between = wanted_center - current_position;
+//  }
+//  else change_position = 0;
+} 
 
 // ------------------------  //
 // CHANGE PWM DEPNT ON POWER  // -------- -------- -------- -------- -------- -------- -------- 
@@ -409,11 +420,11 @@ void print_bt() {
 //    Serial.print("Duty: ");
 //    Serial.println(dutycycle);    
    
-    String powervals = String(power_after, 4)  + ',' + String(dutycycle)  + ',' + String(load_voltage, 4)+ ',' + String(prev_load_voltage)+ ',' + String(read_current, 4) + ',' + String(power, 4) + ',' + String(read_voltage, 4)+ ',' + String(current_position);  
+    String powervals = String(power_after, 4)  + ',' + String(dutycycle_test)  + ',' + String(load_voltage, 4)+ ',' + String(prev_load_voltage)+ ',' + String(read_current, 4) + ',' + String(power, 4) + ',' + String(read_voltage, 4)+ ',' + String(current_position);  
 
     String powervals_bt = String(power_after)  + ','+ String(load_voltage)  + ',' + String(read_current)+','+ String(degree) + ';';    
 
-    altSerial.println(powervals_bt); 
+    //altSerial.println(powervals_bt); 
     
   Serial.println(powervals); // print to python Serial
 }

@@ -6,7 +6,7 @@ import time
 import serial 
 import os
 
-port_name = "COM5"
+port_name = "COM7"
 baudrate = 9600
 ser = serial.Serial(port_name,baudrate)
 
