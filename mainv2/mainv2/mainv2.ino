@@ -58,8 +58,9 @@ and digital pins (pins 4, 6, 8, 9, 10, and 12 can be used for analog)
 #define LOAD_VOLTAGE 0
 #define INITIAL_VOLTAGE 1
 #define INITIAL_CURRENT 2
+#define SPEED 5
 
-#define POWER_DIFF 0.01
+#define POWER_DIFF 0.05
 #define LOAD_RESISTANCE 100.0
 
 #define center_low 2.85
@@ -96,26 +97,37 @@ float load_voltage = 0.0;
 float load_voltage_avg = 0.0;
 
 float prev_load_voltage = 0.0;
+float speed_rpm = 0.0, speed2 = 0.0;
 
 float load_voltage_sum = 0.0;
 float read_current_sum = 0.0;
 float read_voltage_sum = 0.0;
 float current_position_sum = 0.0;
+float speed_sum = 0.0;
 
 float load_voltage_sum_2 = 0.0;
 float read_current_sum_2 = 0.0;
 float read_voltage_sum_2 = 0.0;
+float speed_sum_2 = 0.0;
 
 
 float power_after_sum = 0.0;
 
 int high_enough = 0;
-int n = 0, i = 0, t = 0, s = 0, v = 0;
+int n = 0, i = 0, t = 0, s = 0, v = 0, p = 0;
 int inc = 1;
 int dec = 0;
 
 float current_position = 0;
 
+//constants for freq rpm
+const uint8_t frqpin = 10; // digital pin #5
+const uint32_t oneSecond = 1000;
+uint32_t timer = 0;
+uint32_t sts = 0;
+const uint32_t c = 10; // wait for 3000 pulses
+uint32_t ets = 0;
+float freq;
 
 // -------------------------  //
 // PWM HARDWARE TIMER CONFIG  // -------- -------- -------- -------- -------- 
@@ -178,6 +190,8 @@ void setup(void)
     while (!Serial1) {}
      // wait for serial port to connect. Needed for native USB port only  altSerial.begin(9600);
   altSerial.begin(9600);
+  pinMode(frqpin,INPUT);
+  digitalWrite(frqpin,HIGH); // pullup
 }
 
 // --------  //
@@ -237,53 +251,62 @@ void read_direc() {
   read_current_sum = read_current_sum +  digcurr(digvolt(analogRead(INITIAL_CURRENT)));
   load_voltage_sum = load_voltage_sum + analogRead(LOAD_VOLTAGE) * (5.0/1023.0) * 9.3;
   current_position_sum = digvolt(analogRead(DIRECPIN)) + current_position_sum;
+  power_after_sum = (load_voltage * load_voltage / LOAD_RESISTANCE) + power_after_sum;
+  speed_sum = speed_sum + digvolt(analogRead(SPEED));
 
- n = n + 1;
+  n = n + 1;
 
-  if (n==100) {
-    read_voltage_avg = read_voltage_sum/100.0;
-    read_current_avg = read_current_sum/100.0;
-    if(read_current_avg < 0 ) read_current_avg = 0;
-    load_voltage_avg = load_voltage_sum/100.0;
+  if (n == 100) {
+    read_voltage = read_voltage_sum/100.0;
+    read_current = read_current_sum/100.0;
+    if(read_current < 0 ) read_current = 0;
+    load_voltage = load_voltage_sum/100.0;
     current_position = current_position_sum/100;
-
-   read_voltage_sum_2 = read_voltage_sum_2 + read_voltage_avg;
-   read_current_sum_2 = read_current_sum_2 +  read_current_avg;
-   load_voltage_sum_2 = load_voltage_sum_2 + load_voltage_avg;
+    power_after = power_after_sum/100.0;
+//
+    speed2 = speed_sum/100.0; // 97.39*volt + 36.495
+    speed_sum_2 = speed_sum_2 + speed2;  
+  //  read_voltage_sum_2 = read_voltage_sum_2 + read_voltage_avg;
+  //  read_current_sum_2 = read_current_sum_2 +  read_current_avg;
+  //  load_voltage_sum_2 = load_voltage_sum_2 + load_voltage_avg;
     
     n=0;
     read_voltage_sum = 0.0;
     read_current_sum = 0.0;
     load_voltage_sum = 0.0;
     current_position_sum= 0.0;
+    power_after_sum = 0.0;
+    speed_sum = 0.0;
     v = v +1;
   }
 
-  if (v == 25) {
-    read_voltage = read_voltage_sum_2/25.0;
-    read_current = read_current_sum_2/25.0;
-    if(read_current < 0 ) read_current = 0;
-    load_voltage = load_voltage_sum_2/25.0;
-    
-    v=0;
-    read_voltage_sum_2 = 0.0;
-    read_current_sum_2 = 0.0;
-    load_voltage_sum_2 = 0.0;
+  if (v==100) {
+    speed_rpm = speed_sum_2/100.0;
+    speed_sum_2 = 0;
+    v = 0;
   }
+//
+//  pulseIn(frqpin,LOW);
+//  sts = micros(); // start time stamp
+//  for (uint32_t i=c; i>0; i--)
+//    pulseIn(frqpin,HIGH);
+//  ets = micros(); // end time stampt
+//  freq = (c*1e6/(ets-sts));
+
+  // if (v == 25) {
+  //   read_voltage = read_voltage_sum_2/25.0;
+  //   read_current = read_current_sum_2/25.0;
+  //   if(read_current < 0 ) read_current = 0;
+  //   load_voltage = load_voltage_sum_2/25.0;
+    
+  //   v=0;
+  //   read_voltage_sum_2 = 0.0;
+  //   read_current_sum_2 = 0.0;
+  //   load_voltage_sum_2 = 0.0;
+  // }
 
   current_after_boost = load_voltage / LOAD_RESISTANCE;
-
-  i = i+1;
-
   power = (read_current*read_voltage); 
-
-  power_after_sum = (load_voltage * load_voltage / LOAD_RESISTANCE) + power_after_sum;
-
-  if (i == 100) {
-      power_after = power_after_sum/100.0;
-      power_after_sum = 0.0;
-      i = 0;
-   }
 
   t = t+1;
   
@@ -305,9 +328,13 @@ void turbine_ISR() {
     change_PWM();  // PWM control every 1 seconds
     s = 0;
   }
-  s = s+1;
   
-  print_bt(); // print to serial
+  s = s+1;
+  if (p = 100) {
+    print_bt(); // print to serial
+    p =0;
+  }
+  p = p +1;
 }
 
 void change_step(void)
@@ -327,7 +354,7 @@ void change_step(void)
 void change_PWM() {
   
   // wait till voltage has reached 10 Volts (is spinning fast enough after starting up) once to start changing duty cycle ; and wait to stabilize
-  if (load_voltage > 10 && (abs(prev_load_voltage - load_voltage) < 0.5)) {
+  if (load_voltage > 10 && (abs(prev_load_voltage - load_voltage) < 1) ) {
     high_enough = 1; //   
   }  
   else {
@@ -409,11 +436,11 @@ void print_bt() {
 //    Serial.print("Duty: ");
 //    Serial.println(dutycycle);    
    
-    String powervals = String(power_after, 4)  + ',' + String(dutycycle)  + ',' + String(load_voltage, 4)+ ',' + String(prev_load_voltage)+ ',' + String(read_current, 4) + ',' + String(power, 4) + ',' + String(read_voltage, 4)+ ',' + String(current_position);  
+    String powervals = String(power_after, 4)  + ',' + String(dutycycle)  + ',' + String(load_voltage, 4)+ ',' + String(prev_load_voltage)+ ',' + String(read_current, 4) + ',' + String(power, 4) + ',' + String(read_voltage, 4)+ ',' + String(current_position) + ',' + String(speed_rpm, 2) + ',' + String(freq);  
 
     String powervals_bt = String(power_after)  + ','+ String(load_voltage)  + ',' + String(read_current)+','+ String(degree) + ';';    
 
-    altSerial.println(powervals_bt); 
+  //  altSerial.println(powervals_bt); 
     
   Serial.println(powervals); // print to python Serial
 }

@@ -45,10 +45,10 @@ p4.showGrid(x=None, y=True, alpha=None)
 p5.showGrid(x=None, y=True, alpha=None)
 
 p1.setRange(yRange=[20,80])
-p2.setRange(yRange=[0,17])
-p3.setRange(yRange=[0,3])
-p4.setRange(yRange=[0,3])
-p5.setRange(yRange=[0,0.5])
+p2.setRange(yRange=[0,18])
+p3.setRange(yRange=[0,4])
+p4.setRange(yRange=[0,4])
+p5.setRange(yRange=[0,0.8])
 
 
 curve1 = p1.plot()
@@ -128,15 +128,19 @@ def print_values():
 	
 	print("Current Before:", str.format('{0:.3f}', data_array[4]))
 	print("Voltage Before:", str.format('{0:.3f}',data_array[6]))
-	print("High Enough: ", str.format('{0:.3f}',data_array[7]))
+	print("Direction: ", str.format('{0:.3f}',data_array[7]))
 	print("Voltage After: ", str.format('{0:.3f}',data_array[2]))
 	print("Power After: ", str.format('{0:.3f}',data_array[0]))
 	print("Power Before:", str.format('{0:.3f}',data_array[5]))
 	print("Duty: ",data_array[1])
-	print("Prev Load V: ",data_array[3])	
+	speed_v = 3.626 * data_array[8] + 4.8
+	print("Speed: ", speed_v)
+	speed_t = data_array[9] * 6.28 * 0.2
+	print("Speed_Turbine: ",speed_t)	
 	#os.system('cls')
-	#cp = data_array[0]/(0.5*1.225*A*V^3)
-	#print("CP: %f\n", cp)
+	cp = data_array[0]/(0.5*1.225*3.14*0.2**2*speed_v**3)
+	print("CP: ", cp)
+	print("lambda:", speed_t/speed_v)
 	
 	
 # Main program: executes the update function and updates the graph
