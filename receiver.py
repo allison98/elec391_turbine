@@ -6,7 +6,7 @@ import time
 import serial 
 import os
 
-port_name = "COM7"
+port_name = "COM5"
 baudrate = 9600
 ser = serial.Serial(port_name,baudrate)
 
@@ -25,7 +25,7 @@ graphic.addLabel('Raw signal', colspan=4)
 timestring = time.strftime("%Y%m%d-%H%M%S")
 
 datafile = open( timestring + '.txt', "w+")
-datafile.write("power after, duty, load voltage, degree, current, power, voltage, load current\n")
+datafile.write("power after, duty, load voltage, prev load voltage, current, power, voltage, position, rps fan, rps turbine \n")
 
 # First row of plots
 graphic.nextRow()
@@ -90,10 +90,10 @@ def update():
 	Xn4[:-1] = Xn4[1:]
 	Xn5[:-1] = Xn5[1:]
 
-	value1 =  data_array[1] # duty
-	value2 = data_array[2] # load volt
-	value3 = data_array[5] # direction
-	value4 = data_array[0] # power
+	value1 =  data_array[1] 
+	value2 = data_array[2] 
+	value3 = data_array[5] 
+	value4 = data_array[0] 
 	value5 = data_array[4] 
 	#avgPower = sum(power_average/len(power_average))
 
@@ -135,9 +135,8 @@ def print_values():
 	print("Duty: ",data_array[1])
 	speed_v = 3.626 * data_array[8] + 4.8
 	print("Speed: ", speed_v)
-	speed_t = data_array[9] * 6.28 * 0.2
+	speed_t = data_array[9] * 60* 0.10472 * 0.2
 	print("Speed_Turbine: ",speed_t)	
-	#os.system('cls')
 	cp = data_array[0]/(0.5*1.225*3.14*0.2**2*speed_v**3)
 	print("CP: ", cp)
 	print("lambda:", speed_t/speed_v)

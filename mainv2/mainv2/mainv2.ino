@@ -59,13 +59,14 @@ and digital pins (pins 4, 6, 8, 9, 10, and 12 can be used for analog)
 #define INITIAL_VOLTAGE 1
 #define INITIAL_CURRENT 2
 #define SPEED 5
+#define TRACKING 11
 
 #define POWER_DIFF 0.05
 #define LOAD_RESISTANCE 100.0
 
-#define center_low 2.85
-#define center_high 3.0
-#define wanted_center 2.9
+#define center_low 2.20
+#define center_high 2.40
+#define wanted_center 2.5
 
 Unistep2 stepperX(2,4,3,7, STEPS, 10000); // non blocking bipolar stepper motor
     // connections with the L298
@@ -120,14 +121,10 @@ int dec = 0;
 
 float current_position = 0;
 
-//constants for freq rpm
-const uint8_t frqpin = 10; // digital pin #5
-const uint32_t oneSecond = 1000;
-uint32_t timer = 0;
-uint32_t sts = 0;
-const uint32_t c = 10; // wait for 3000 pulses
-uint32_t ets = 0;
 float freq;
+boolean ir_sensor, prev_ir_sensor;
+long num = 0;
+float prev = 0.0;
 
 // -------------------------  //
 // PWM HARDWARE TIMER CONFIG  // -------- -------- -------- -------- -------- 
@@ -190,8 +187,8 @@ void setup(void)
     while (!Serial1) {}
      // wait for serial port to connect. Needed for native USB port only  altSerial.begin(9600);
   altSerial.begin(9600);
-  pinMode(frqpin,INPUT);
-  digitalWrite(frqpin,HIGH); // pullup
+  pinMode(TRACKING, INPUT); // set trackingPin as INPUT
+
 }
 
 // --------  //
@@ -256,20 +253,17 @@ void read_direc() {
 
   n = n + 1;
 
-  if (n == 100) {
-    read_voltage = read_voltage_sum/100.0;
-    read_current = read_current_sum/100.0;
+  if (n == 200) {
+    read_voltage = read_voltage_sum/200.0;
+    read_current = read_current_sum/200.0;
     if(read_current < 0 ) read_current = 0;
-    load_voltage = load_voltage_sum/100.0;
-    current_position = current_position_sum/100;
-    power_after = power_after_sum/100.0;
+    load_voltage = load_voltage_sum/200.0;
+    current_position = current_position_sum/200;
+    power_after = power_after_sum/200.0;
 //
-    speed2 = speed_sum/100.0; // 97.39*volt + 36.495
+    speed2 = speed_sum/200.0; // 97.39*volt + 36.495
     speed_sum_2 = speed_sum_2 + speed2;  
-  //  read_voltage_sum_2 = read_voltage_sum_2 + read_voltage_avg;
-  //  read_current_sum_2 = read_current_sum_2 +  read_current_avg;
-  //  load_voltage_sum_2 = load_voltage_sum_2 + load_voltage_avg;
-    
+
     n=0;
     read_voltage_sum = 0.0;
     read_current_sum = 0.0;
@@ -285,35 +279,31 @@ void read_direc() {
     speed_sum_2 = 0;
     v = 0;
   }
-//
-//  pulseIn(frqpin,LOW);
-//  sts = micros(); // start time stamp
-//  for (uint32_t i=c; i>0; i--)
-//    pulseIn(frqpin,HIGH);
-//  ets = micros(); // end time stampt
-//  freq = (c*1e6/(ets-sts));
-
-  // if (v == 25) {
-  //   read_voltage = read_voltage_sum_2/25.0;
-  //   read_current = read_current_sum_2/25.0;
-  //   if(read_current < 0 ) read_current = 0;
-  //   load_voltage = load_voltage_sum_2/25.0;
-    
-  //   v=0;
-  //   read_voltage_sum_2 = 0.0;
-  //   read_current_sum_2 = 0.0;
-  //   load_voltage_sum_2 = 0.0;
-  // }
 
   current_after_boost = load_voltage / LOAD_RESISTANCE;
   power = (read_current*read_voltage); 
 
+  // MPPT
   t = t+1;
   
   if (t == 1000) {
     prev_load_voltage = load_voltage;
     t = 0; 
   }
+
+  // RPM 
+  ir_sensor = digitalRead(TRACKING); // read the value of tracking module
+
+  if (ir_sensor and ir_sensor!= prev_ir_sensor)
+    num++;
+    
+  if (abs(millis()- prev) > 5000) {
+     prev = millis();
+     freq = num/(5.0);
+     num = 0;
+  }
+
+  prev_ir_sensor = ir_sensor;
  
 }
 
@@ -340,10 +330,10 @@ void turbine_ISR() {
 void change_step(void)
 {
     if ( stepperX.stepsToGo() == 0 and (current_position < center_low)){ // If stepsToGo returns 0 the stepper is not moving
-      stepperX.move(1);  // move right 
+      stepperX.move(-1);  // move right 
     } 
     if ( stepperX.stepsToGo() == 0 and (current_position > center_high)){ // If stepsToGo returns 0 the stepper is not moving
-      stepperX.move(-1);  // move left
+      stepperX.move(1);  // move left
     } 
 }
 
@@ -419,26 +409,11 @@ int currentMillis;
 
 void print_bt() {
   /* SERIAL PRINTING TO BLUETOOTH */
- 
-/* calculations, average wind speed and average direction? Maximum power*/
-    // currentMillis = millis()/1000;
-    //totalE = power*currentMillis;
-//    Serial.print("Current Before: ");
-//   Serial.println(read_current, 5);
-//    Serial.print("Voltage Before: ");
-//    Serial.println(read_voltage, 5);
-//    Serial.print("Current After: ");
-//    Serial.println(current_after_boost, 5);
-//    Serial.print("Voltage After: ");
-//    Serial.println(load_voltage, 5);
-//    Serial.print("Power After: ");
-//    Serial.println(power_after, 5);
-//    Serial.print("Duty: ");
-//    Serial.println(dutycycle);    
+  
    
     String powervals = String(power_after, 4)  + ',' + String(dutycycle)  + ',' + String(load_voltage, 4)+ ',' + String(prev_load_voltage)+ ',' + String(read_current, 4) + ',' + String(power, 4) + ',' + String(read_voltage, 4)+ ',' + String(current_position) + ',' + String(speed_rpm, 2) + ',' + String(freq);  
 
-    String powervals_bt = String(power_after)  + ','+ String(load_voltage)  + ',' + String(read_current)+','+ String(degree) + ';';    
+  //  String powervals_bt = String(power_after)  + ','+ String(load_voltage)  + ',' + String(read_current)+','+ String(degree) + ';';    
 
   //  altSerial.println(powervals_bt); 
     
