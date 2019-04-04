@@ -31,37 +31,36 @@ datafile.write("power after, duty, load voltage, prev load voltage, current, pow
 graphic.nextRow()
 p1 = graphic.addPlot(title="Duty", labels={'left':'%', 'bottom':'Time'})
 p2 = graphic.addPlot(title="Voltage at Load", labels={'left':'Voltage', 'bottom':'Time'})
-p3 = graphic.addPlot(title="Power ", labels={'left':'Degree', 'bottom':'Time'})
+p5 = graphic.addPlot(title="Current", labels={'left':'Amps', 'bottom':'Time'})
 
 # Second row of plots 
 graphic.nextRow()
-p4 = graphic.addPlot(title="Power After", labels={'left':'Watts', 'bottom':'Time'})
-p5 = graphic.addPlot(title="Current", labels={'left':'Watts', 'bottom':'Time'})
+p3 = graphic.addPlot(title="Power ", labels={'left':'Degree', 'bottom':'Time'}, colspan = 2)
 
 p1.showGrid(x=None, y=True, alpha=None)
 p2.showGrid(x=None, y=True, alpha=None)
 p3.showGrid(x=None, y=True, alpha=None)
-p4.showGrid(x=None, y=True, alpha=None)
+#p4.showGrid(x=None, y=True, alpha=None)
 p5.showGrid(x=None, y=True, alpha=None)
 
 p1.setRange(yRange=[20,80])
 p2.setRange(yRange=[0,18])
 p3.setRange(yRange=[0,4])
-p4.setRange(yRange=[0,4])
+#p4.setRange(yRange=[0,4])
 p5.setRange(yRange=[0,0.8])
 
 
 curve1 = p1.plot()
 curve2 = p2.plot()
 curve3 = p3.plot()
-curve4 = p4.plot()
+#curve4 = p4.plot()
 curve5 = p5.plot()
 
 windowWidth = 500                      
 Xn1 = np.linspace(0,0,windowWidth)
 Xn2 = np.linspace(0,0,windowWidth)
 Xn3 = np.linspace(0,0,windowWidth)
-Xn4 = np.linspace(0,0,windowWidth)   
+#Xn4 = np.linspace(0,0,windowWidth)   
 Xn5 = np.linspace(0,0,windowWidth)   
 
 ptr = -windowWidth
@@ -87,13 +86,13 @@ def update():
 	Xn1[:-1] = Xn1[1:]
 	Xn2[:-1] = Xn2[1:]
 	Xn3[:-1] = Xn3[1:]
-	Xn4[:-1] = Xn4[1:]
+	#Xn4[:-1] = Xn4[1:]
 	Xn5[:-1] = Xn5[1:]
 
 	value1 =  data_array[1] 
 	value2 = data_array[2] 
 	value3 = data_array[5] 
-	value4 = data_array[0] 
+	#value4 = data_array[0] 
 	value5 = data_array[4] 
 	#avgPower = sum(power_average/len(power_average))
 
@@ -101,7 +100,7 @@ def update():
 		Xn1[-1] = float(value1)
 		Xn2[-1] = float(value2)
 		Xn3[-1] = float(value3)
-		Xn4[-1] = float(value4)
+		#Xn4[-1] = float(value4)
 		Xn5[-1] = float(value5)
 	except ValueError:
 		pass
@@ -110,13 +109,13 @@ def update():
 	curve1.setData(Xn1) 
 	curve2.setData(Xn2)
 	curve3.setData(Xn3)
-	curve4.setData(Xn4)
+	#curve4.setData(Xn4)
 	curve5.setData(Xn5)
 
 	curve1.setPos(ptr,0)
 	curve2.setPos(ptr,0)
 	curve3.setPos(ptr,0)
-	curve4.setPos(ptr,0)
+	#curve4.setPos(ptr,0)
 	curve5.setPos(ptr,0)
 	QtGui.QApplication.processEvents()
 
@@ -134,12 +133,13 @@ def print_values():
 	print("Power Before:", str.format('{0:.3f}',data_array[5]))
 	print("Duty: ",data_array[1])
 	speed_v = 3.626 * data_array[8] + 4.8
-	print("Speed: ", speed_v)
+	print("Wind Speed: ", speed_v)
 	speed_t = data_array[9] * 60* 0.10472 * 0.2
-	print("Speed_Turbine: ",speed_t)	
+	print("RPM of Turbine:", str.format('{0:.3f}',data_array[9]*60))
+	print("Speed of Turbine: ",str.format('{0:.3f}',speed_t))	
 	cp = data_array[0]/(0.5*1.225*3.14*0.2**2*speed_v**3)
-	print("CP: ", cp)
-	print("lambda:", speed_t/speed_v)
+	print("CP: ", str.format('{0:.3f}',cp))
+	print("Lambda:", str.format('{0:.3f}',speed_t/speed_v))
 	
 	
 # Main program: executes the update function and updates the graph

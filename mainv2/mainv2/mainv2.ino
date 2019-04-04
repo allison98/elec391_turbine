@@ -61,12 +61,11 @@ and digital pins (pins 4, 6, 8, 9, 10, and 12 can be used for analog)
 #define SPEED 5
 #define TRACKING 11
 
-#define POWER_DIFF 0.05
-#define LOAD_RESISTANCE 100.0
+#define POWER_DIFF 0.02
+#define LOAD_RESISTANCE 87.0
 
-#define center_low 2.20
+#define center_low 2.15
 #define center_high 2.40
-#define wanted_center 2.5
 
 Unistep2 stepperX(2,4,3,7, STEPS, 10000); // non blocking bipolar stepper motor
     // connections with the L298
@@ -82,7 +81,7 @@ AltSoftSerial altSerial; // pin 5 for transmitting
 int previous_direction = 0;
 int val_direction = 0;
 int step_direction = 0;
-int dutycycle = 50;
+int dutycycle = 35;
 float maxPower = 0, minPower = 99 , avgPower = 0 , totalE = 0 , power = 0;
 float read_voltage = 0.0;
 float read_current = 0.0;
@@ -115,6 +114,7 @@ float speed_sum_2 = 0.0;
 float power_after_sum = 0.0;
 
 int high_enough = 0;
+int steady = 0;
 int n = 0, i = 0, t = 0, s = 0, v = 0, p = 0;
 int inc = 1;
 int dec = 0;
@@ -158,19 +158,19 @@ void pwm613configure(int mode)
 // Argument is PWM between 0 and 255
 // Set PWM to D13 (Timer4 A)
 // Argument is PWM between 0 and 255
-//void pwmSet13(int value)
-//{
-//OCR4A=value;   // Set PWM value
-//DDRC|=1<<7;    // Set Output Mode C7
-//TCCR4A=0x82;  // Activate channel A
-//}
-
-void pwmSet6(int value)
+void pwmSet13(int value)
 {
-OCR4D=value;   // Set PWM value
-DDRD|=1<<7;    // Set Output Mode D7
-TCCR4C|=0x09;  // Activate channel D
+OCR4A=value;   // Set PWM value
+DDRC|=1<<7;    // Set Output Mode C7
+TCCR4A=0x82;  // Activate channel A
 }
+
+//void pwmSet6(int value)
+//{
+//OCR4D=value;   // Set PWM value
+//DDRD|=1<<7;    // Set Output Mode D7
+//TCCR4C|=0x09;  // Activate channel D
+//}
 
 // ------------  //
 // INITIAL SETUP // -------- -------- -------- -------- -------- -------- -------- 
@@ -183,10 +183,10 @@ void setup(void)
   // stepper.setSpeed(10); 
   pwm613configure(PWM94k); // configure pin 6 for PWM using hardware registers at 94kHz
   Serial.begin(9600);
-  Serial1.begin(9600);
-    while (!Serial1) {}
-     // wait for serial port to connect. Needed for native USB port only  altSerial.begin(9600);
-  altSerial.begin(9600);
+//  Serial1.begin(9600);
+//    while (!Serial1) {}
+//     // wait for serial port to connect. Needed for native USB port only  altSerial.begin(9600);
+// // altSerial.begin(9600);
   pinMode(TRACKING, INPUT); // set trackingPin as INPUT
 
 }
@@ -200,28 +200,6 @@ void loop(void)
   stepperX.run(); // have to run for the nonblocking motor 
   read_direc(); // get all values 
   //print_bt();    // serial control
-
-//  
-//    Serial.print("Current Before: ");
-//    Serial.println(read_current, 5);
-//    Serial.print("Voltage Before: ");
-//    Serial.println(read_voltage, 5);
-//    Serial.print("Current After: ");
-//    Serial.println(current_after_boost, 5);
-//    Serial.print("Voltage After: ");
-//    Serial.println(load_voltage);
-//    Serial.print("Power After: ");
-//    Serial.println(power_after, 5);
-//    Serial.print("Duty: ");
-//    Serial.println(dutycycle); 
-//    Serial.print("Direction: ");
-   // Serial.println(difference_between*1023/5/4.5); 
-  //  Serial.println(difference_between);
-  //  Serial.println(change_position);
-//    Serial.println(current_position);
-//    Serial.println();
-//    Serial.println(degree); 
-//  delay(10);//delay for visual
 }
 
 // ------------------------  //
@@ -253,15 +231,15 @@ void read_direc() {
 
   n = n + 1;
 
-  if (n == 200) {
-    read_voltage = read_voltage_sum/200.0;
-    read_current = read_current_sum/200.0;
+  if (n == 500) {
+    read_voltage = read_voltage_sum/500.0;
+    read_current = read_current_sum/500.0;
     if(read_current < 0 ) read_current = 0;
-    load_voltage = load_voltage_sum/200.0;
-    current_position = current_position_sum/200;
-    power_after = power_after_sum/200.0;
+    load_voltage = load_voltage_sum/500.0;
+    current_position = current_position_sum/500;
+    power_after = power_after_sum/500.0;
 //
-    speed2 = speed_sum/200.0; // 97.39*volt + 36.495
+    speed2 = speed_sum/500.0; // 97.39*volt + 36.495
     speed_sum_2 = speed_sum_2 + speed2;  
 
     n=0;
@@ -286,7 +264,7 @@ void read_direc() {
   // MPPT
   t = t+1;
   
-  if (t == 1000) {
+  if (t == 600) {
     prev_load_voltage = load_voltage;
     t = 0; 
   }
@@ -312,7 +290,9 @@ void read_direc() {
 // --- //
 
 void turbine_ISR() {
+  if(steady) {
   change_step(); // direction control
+  }
   
   if (s == 100) {
     change_PWM();  // PWM control every 1 seconds
@@ -344,15 +324,21 @@ void change_step(void)
 void change_PWM() {
   
   // wait till voltage has reached 10 Volts (is spinning fast enough after starting up) once to start changing duty cycle ; and wait to stabilize
-  if (load_voltage > 10 && (abs(prev_load_voltage - load_voltage) < 1) ) {
+  if ((abs(prev_load_voltage - load_voltage) < 1) ) {
     high_enough = 1; //   
   }  
   else {
     high_enough = 0;
   }
-  
-  if (load_voltage < 7) { // when turning off 
+
+  if (load_voltage > 10) {
+    steady = 1;
+  }
+
+
+  if (load_voltage < 3) { // when turning off 
     high_enough = 0;
+    dutycycle = 35;
   }
 
   if (high_enough) {
@@ -388,17 +374,21 @@ void change_PWM() {
       else {
         dutycycle = dutycycle; // max or min duty then don't change or if power is the same
       }
+   // max and min duty cycle that the boost is capable of taking
+  if (dutycycle < 30) dutycycle = 30; 
+  if (dutycycle > 75) dutycycle = 75;
+
   }
       // set pin 6 for PWM output to boost converter
 
-  // max and min duty cycle that the boost is capable of taking
-  if (dutycycle < 30) dutycycle = 30; 
-  if (dutycycle > 75) dutycycle = 75;
-      
-  if(maxPower < power) maxPower = power;  
-  if(minPower > power) minPower = power;
+ 
 
-  pwmSet6(DUTY2PWM(dutycycle));  
+   if (load_voltage > 15) {
+    dutycycle = 100;
+    high_enough  = 0;
+  }
+  
+  pwmSet13(DUTY2PWM(dutycycle));  
 
 }
 
